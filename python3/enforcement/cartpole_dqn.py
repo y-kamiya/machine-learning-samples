@@ -9,11 +9,9 @@ from collections import namedtuple
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 ENV = 'CartPole-v0'
-NUM_DIGITIZE = 6
 GAMMA = 0.99
-ETA = 0.5
 MAX_STEPS = 200
-NUM_EPISODE = 1000
+NUM_EPISODE = 500
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -102,7 +100,7 @@ class Brain:
         self.optimizer.step()
 
     def decide_action(self, state, episode):
-        epsilon = 0.5 / (1 / (episode + 1))
+        epsilon = 0.5 * (1 / (episode + 1))
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
