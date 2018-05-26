@@ -2,17 +2,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import gym
-from gym import wrappers
-import numpy as np
 from collections import namedtuple 
+import random
+import torch
+from torch import nn
+from torch import optim
+import torch.nn.functional as F
+from torch.autograd import Variable
+
+BATCH_SIZE = 128
+CAPACITY = 10000
+GAMMA = 0.99
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
-
-ENV = 'CartPole-v0'
-GAMMA = 0.99
-MAX_STEPS = 200
-NUM_EPISODE = 500
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -32,16 +34,6 @@ class ReplayMemory:
 
     def __len__(self):
         return len(self.memory)
-
-import random
-import torch
-from torch import nn
-from torch import optim
-import torch.nn.functional as F
-from torch.autograd import Variable
-
-BATCH_SIZE = 32
-CAPACITY = 10000
 
 class Net(nn.Module):
     def __init__(self, num_states, num_actions):
@@ -67,7 +59,7 @@ class Brain:
 
         self.model = Net(num_states, num_actions)
         print(self.model)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
     
     def reply(self):
         if (len(self.memory) < BATCH_SIZE):
@@ -126,81 +118,4 @@ class Agent:
     def memory(self, state, action, state_next, reward):
         return self.brain.memory.push(state, action, state_next, reward)
         
-class Environment:
-    def __init__(self):
-        env = gym.make(ENV)
-        self.env = wrappers.Monitor(env, '/tmp/gym/cartpole_dqn', force=True)
-        self.num_states = self.env.observation_space.shape[0]
-        self.num_actions = self.env.action_space.n
-        self.agent = Agent(self.num_states, self.num_actions)
-        self.total_step = np.zeros(10)
-
-    def run(self):
-        complete_episodes = 0
-        episode_final = False
-
-        for episode in range(NUM_EPISODE):
-            observation = self.env.reset()
-            state = torch.from_numpy(observation).type(torch.FloatTensor)
-            state = torch.unsqueeze(state, 0)
-
-            for step in range(MAX_STEPS):
-                if episode_final:
-                    frames.append(self.env.render(mode='rgb_array'))
-
-                action = self.agent.get_action(state, episode)
-
-                observation_next, _, done, _ = self.env.step(action.item())
-
-                if done:
-                    state_next = None
-                    self.total_step = np.hstack((self.total_step[1:], step + 1))
-                    if step < 195:
-                        reward = torch.FloatTensor([-1.0])
-                        complete_episodes = 0
-                    else:
-                        reward = torch.FloatTensor([1.0])
-                        complete_episodes = complete_episodes + 1
-
-                else:
-                    reward = torch.FloatTensor([0.0])
-                    state_next = torch.from_numpy(observation_next).type(torch.FloatTensor)
-                    state_next = torch.unsqueeze(state_next, 0)
-
-                self.agent.memory(state, action, state_next, reward)
-
-                self.agent.update_q_function()
-
-                state = state_next
-
-                if done:
-                    print('episode: {0}, step: {1}'.format(episode, self.total_step.mean()))
-                    break
-
-                if episode_final:
-                    # display_frames_as_gif(frames)
-                    break
-
-                if 10 <= complete_episodes:
-                    print('success 10 times in sequence')
-                    frames = []
-                    episode_final = True
-                    
-        self.env.close()
-        
-if __name__ == '__main__':
-    # frames = []
-    # env = gym.make(ENV)
-    # env.reset()
-    # for _ in range(0, 200):
-    #     frames.append(env.render(mode='rgb_array'))
-    #     action = np.random.choice(2)
-    #     observation, reward, done, info = env.step(action)
-    #     if done:
-    #         break
-    #
-    # env.close()
-    # display_frames_as_gif(frames)
-    env = Environment()
-    env.run()
 
