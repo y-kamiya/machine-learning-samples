@@ -1,3 +1,17 @@
+'''
+each state express graph below
+purpose is to learn the route to goal
+                       
+                       -- state3             
+          -- state1 --|   
+         |             -- state4  
+state0 --|             
+         |             -- state5         
+          -- state2 --| 
+                       -- state6 (GOAL)
+                               
+'''
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
