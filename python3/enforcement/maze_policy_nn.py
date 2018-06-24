@@ -11,8 +11,8 @@ from torch.autograd import Variable
 
 NUM_STATE = 8
 NUM_ACTION = 4
-NUM_STEPS = 100
-NUM_EPISODE = 2
+NUM_STEPS = 5
+NUM_EPISODE = 1000
 GAMMA = 0.99
 GOAL = 8
 
@@ -34,12 +34,12 @@ class Net(nn.Module):
 class Environment:
     def __init__(self):
         self.model = Net(NUM_STATE, NUM_ACTION)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
 
     def create_input(self, state):
-        e = torch.zeros([NUM_STATE], requires_grad=True)
-        e[state] = 1
-        return e
+        array = np.zeros(NUM_STATE)
+        array[state] = 1
+        return torch.from_numpy(array).type(torch.FloatTensor)
 
     def get_next_state(self, state, action):
         if action == 0:
@@ -77,8 +77,10 @@ class Environment:
         self.model.eval()
 
         for step in range(0, NUM_STEPS):
-           props = self.model(self.create_input(state))
-           action = np.random.choice(range(0, NUM_ACTION), p=props.data.numpy())
+           output = self.model(self.create_input(state))
+           props = output.data.numpy()
+
+           action = np.random.choice(range(0, NUM_ACTION), p=props)
 
            next_state = self.get_next_state(state, action)
            # print("state: {0}, action: {1}, next:{2}".format(state, action, next_state))
@@ -86,10 +88,7 @@ class Environment:
            ys = np.zeros(NUM_ACTION)
            ys[action] = 1
 
-           history.append([state, action, 0.0, props.data.numpy(), ys])
-           if step == NUM_STEPS:
-               history[-1][2] = -1.0
-               break
+           history.append([state, action, 0.0, output, ys])
 
            if next_state == GOAL:
                history[-1][2] = 1.0
@@ -97,45 +96,31 @@ class Environment:
 
            state = next_state
 
+        if history[-1][2] == 0.0:
+           history[-1][2] = -1.0
+
         return history
 
     def update_policy(self, history, episode):
-        self.model.eval()
-        aaa = self.model(self.create_input(1))
-
         self.model.train()
 
         rewards = np.zeros((len(history)))
-        props = np.zeros((len(history), NUM_ACTION))
         targets = np.zeros((len(history), NUM_ACTION))
         for i, entry in enumerate(history):
             rewards[i] = entry[2]
-            props[i] = entry[3]
             targets[i] = entry[4]
             
         discounted_rewards = self.discount_reward(rewards)
         targets = targets * discounted_rewards
 
-        props.reshape(-1, NUM_ACTION)
         targets.reshape(-1, NUM_ACTION)
-        # props = Variable(torch.tensor(props), requires_grad=True)
-        # targets = Variable(torch.tensor(targets), requires_grad=True)
-        props = Variable(torch.tensor(aaa), requires_grad=True)
-        targets = Variable(torch.tensor(aaa), requires_grad=True)
-        loss = F.l1_loss(props, targets)
+        targets = torch.tensor(targets, dtype=torch.float32)
+
         self.optimizer.zero_grad()
-        loss.backward()
-
-        print("aaaaaaaa")
-        print(props)
-        print("bbbbbbbbbb")
-        print(targets)
-        print("ccccccccccc")
-        print(loss)
-        for param in self.model.parameters():
-            print(param.grad)
-
-        import pdb; pdb.set_trace()
+        for i, entry in enumerate(history):
+            # print(entry)
+            loss = F.smooth_l1_loss(entry[3], targets[i])
+            loss.backward()
 
         self.optimizer.step()
         
