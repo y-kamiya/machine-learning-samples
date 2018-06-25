@@ -12,7 +12,9 @@ from torch.autograd import Variable
 NUM_STATE = 8
 NUM_ACTION = 4
 NUM_STEPS = 5
-NUM_EPISODE = 1000
+NUM_EPISODE = 10000
+NUM_HIDDEN_NODES = 32
+LEARNING_RATE = 0.01
 GAMMA = 0.99
 GOAL = 8
 
@@ -22,9 +24,9 @@ class Net(nn.Module):
         self.num_states = num_states
         self.num_actions = num_actions
 
-        self.fc1 = nn.Linear(self.num_states, 32)
-        self.fc2 = nn.Linear(32, 32)
-        self.fc3 = nn.Linear(32, self.num_actions)
+        self.fc1 = nn.Linear(self.num_states, NUM_HIDDEN_NODES)
+        self.fc2 = nn.Linear(NUM_HIDDEN_NODES, NUM_HIDDEN_NODES)
+        self.fc3 = nn.Linear(NUM_HIDDEN_NODES, self.num_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -34,7 +36,7 @@ class Net(nn.Module):
 class Environment:
     def __init__(self):
         self.model = Net(NUM_STATE, NUM_ACTION)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.01)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
     def create_input(self, state):
         array = np.zeros(NUM_STATE)
@@ -83,7 +85,6 @@ class Environment:
            action = np.random.choice(range(0, NUM_ACTION), p=props)
 
            next_state = self.get_next_state(state, action)
-           # print("state: {0}, action: {1}, next:{2}".format(state, action, next_state))
 
            ys = np.zeros(NUM_ACTION)
            ys[action] = 1
@@ -138,9 +139,8 @@ class Environment:
             self.update_policy(history, episode)
 
             self.model.eval()
-            # if episode % 10 == 0:
-            self.display_model(episode)
-
+            if episode % 10 == 0:
+                self.display_model(episode)
 
 if __name__ == '__main__':
     env = Environment()
