@@ -11,8 +11,8 @@ from torch.autograd import Variable
 
 NUM_STATE = 8
 NUM_ACTION = 4
-NUM_STEPS = 5
-NUM_EPISODE = 10000
+NUM_STEPS = 4
+NUM_EPISODE = 5000
 NUM_HIDDEN_NODES = 32
 LEARNING_RATE = 0.01
 GAMMA = 0.99
@@ -90,6 +90,9 @@ class Environment:
            ys[action] = 1
 
            history.append([state, action, 0.0, output, ys])
+
+           if next_state == state:
+               break;
 
            if next_state == GOAL:
                history[-1][2] = 1.0
