@@ -33,6 +33,16 @@ class Net(nn.Module):
         return F.softmax(self.fc3(x))
 
 class Environment:
+    actions_permitted = [
+        [False, True, True, False],
+        [False, True, False, True],
+        [False, False, True, True],
+        [True, True, True, False],
+        [False, False, True, True],
+        [True, False, False, False],
+        [True, False, False, False],
+        [True, True, False, False],
+    ]
     def __init__(self):
         self.model = Net(NUM_STATE, NUM_ACTION)
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
@@ -43,6 +53,10 @@ class Environment:
         return torch.from_numpy(array).type(torch.FloatTensor)
 
     def get_next_state(self, state, action):
+        is_permitted = Environment.actions_permitted[state][action]
+        if not is_permitted:
+            return state
+
         if action == 0:
            s_next = state - 3
         elif action == 1:
