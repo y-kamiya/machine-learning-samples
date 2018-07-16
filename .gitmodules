@@ -1,3 +1,6 @@
 [submodule "python3/reinforcement/baselines"]
 	path = python3/reinforcement/baselines
 	url = https://github.com/openai/baselines.git
+[submodule "python3/reinforcement/retro-contest"]
+	path = python3/reinforcement/retro-contest
+	url = https://github.com/openai/retro-contest.git
