@@ -1,0 +1,21 @@
+{
+  "done": {
+    "variables": {
+      "lives": {
+        "op": "equal",
+        "reference": "2"
+      }
+    }
+  },
+  "reward": {
+    "variables": {
+      "x": {
+        "reward": 75.0
+      },
+      "screen_x": {
+        "reward": 100.0
+      }
+    }
+  }
+}
+
