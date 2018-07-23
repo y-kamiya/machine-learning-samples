@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import argparse
+import sys
 from baselines.common.atari_wrappers import WarpFrame, FrameStack
 import gym
 import retro
@@ -11,16 +13,19 @@ from torch import nn
 from torch import optim
 import torch.nn.functional as F
 
-NUM_EPISODE = 10
-NUM_STEPS = 1000
+NUM_EPISODE = 1
+NUM_STEPS = 4000
 LEARNING_RATE = 0.001
 GAMMA = 0.999
+DATA_PATH_DEFAULT = 'model_state_sonic.dat'
 
 def make_env(stack=True, scale_rew=True):
     """
     Create an environment with some standard wrappers.
     """
     env = retro.make(game='SonicTheHedgehog-Genesis', state='GreenHillZone.Act1')
+    env.auto_record('./data')
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=2000)
     env = SonicDiscretizer(env)
     if scale_rew:
         env = RewardScaler(env)
@@ -50,9 +55,12 @@ class Net(nn.Module):
         return F.softmax(self.fc2(x))
 
 class Environment:
-    def __init__(self):
+    def __init__(self, data_path):
         self.env = make_env()
         self.model = Net(self.env.action_space.n)
+        if data_path:
+            self.model.load_state_dict(torch.load(data_path))
+        self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
     def prepro(self, I):
@@ -64,7 +72,7 @@ class Environment:
         ret[3] = I[:, :, 3]
         return ret
 
-    def run_to_goal(self):
+    def run_to_goal(self, episode):
         observation = self.env.reset()
         state_prev = None
         history = []
@@ -72,7 +80,6 @@ class Environment:
         self.model.eval()
 
         for step in range(0, NUM_STEPS):
-           print("step: {0}".format(step))
            state = self.prepro(observation)
            state_diff = state - state_prev if state_prev is not None else np.zeros(4*84*84).reshape(4,84,84)
            state_prev = state
@@ -86,10 +93,13 @@ class Environment:
            action = np.zeros(self.env.action_space.n)
            action[action_index] = 1
            next_observation, reward, done, info = self.env.step(action_index)
+           self.env.render()
+           print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
 
            history.append([step, action_index, reward, output, action])
 
            if done:
+               print('done')
                break
 
            observation = next_observation
@@ -131,8 +141,11 @@ class Environment:
     def run(self):
         for episode in range(NUM_EPISODE):
             obs = self.env.reset()
-            history = self.run_to_goal()
+            history = self.run_to_goal(episode)
             self.update_policy(history, episode)
+
+        torch.save(self.model.state_dict(), self.data_path)
+        self.env.close()
 
 class SonicDiscretizer(gym.ActionWrapper):
     """
@@ -190,7 +203,13 @@ class AllowBacktracking(gym.Wrapper):
 
 
 if __name__ == '__main__':
-    env = Environment()
+    argv = sys.argv[1:]
+
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('-p', '--path', help='path to model data file')
+    args = parser.parse_args(argv)
+
+    env = Environment(args.path)
     env.run()
 
 
