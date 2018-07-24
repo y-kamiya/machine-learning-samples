@@ -13,19 +13,19 @@ from torch import nn
 from torch import optim
 import torch.nn.functional as F
 
-NUM_EPISODE = 1
-NUM_STEPS = 4000
-LEARNING_RATE = 0.001
+NUM_EPISODE = 500
+NUM_STEPS = 2000
+LEARNING_RATE = 0.0001
 GAMMA = 0.999
-DATA_PATH_DEFAULT = 'model_state_sonic.dat'
+DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
 
 def make_env(stack=True, scale_rew=True):
     """
     Create an environment with some standard wrappers.
     """
     env = retro.make(game='SonicTheHedgehog-Genesis', state='GreenHillZone.Act1')
-    env.auto_record('./data')
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=2000)
+    # env.auto_record('./data')
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=NUM_STEPS)
     env = SonicDiscretizer(env)
     if scale_rew:
         env = RewardScaler(env)
@@ -73,6 +73,7 @@ class Environment:
         return ret
 
     def run_to_goal(self, episode):
+        print('start run_to_goal')
         observation = self.env.reset()
         state_prev = None
         history = []
@@ -90,16 +91,16 @@ class Environment:
 
            action_index = np.random.choice(range(0, self.env.action_space.n), p=props)
 
-           action = np.zeros(self.env.action_space.n)
-           action[action_index] = 1
            next_observation, reward, done, info = self.env.step(action_index)
+           print(info)
            self.env.render()
            print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
 
-           history.append([step, action_index, reward, output, action])
+           history.append([step, action_index, reward, output])
 
            if done:
                print('done')
+               history[-1][2] += info['x'] * 0.001
                break
 
            observation = next_observation
@@ -107,6 +108,7 @@ class Environment:
         return history
 
     def discount_reward(self, rewards):
+        print('start discount_reward')
         discounted_rewards = np.zeros((rewards.size, self.env.action_space.n))
         running_add = 0
         for i in range(rewards.size)[::-1]:
@@ -117,13 +119,14 @@ class Environment:
         return discounted_rewards
 
     def update_policy(self, history, episode):
+        print('start update_policy')
         self.model.train()
 
         rewards = np.zeros((len(history)))
         targets = np.zeros((len(history), self.env.action_space.n))
         for i, entry in enumerate(history):
             rewards[i] = entry[2]
-            targets[i] = entry[4]
+            targets[i][entry[1]] = 1
             
         discounted_rewards = self.discount_reward(rewards)
         targets = targets * discounted_rewards
@@ -133,6 +136,7 @@ class Environment:
 
         self.optimizer.zero_grad()
         for i, entry in enumerate(history):
+            print(entry[3], targets[i])
             loss = F.smooth_l1_loss(entry[3], targets[i])
             loss.backward()
 
@@ -140,11 +144,11 @@ class Environment:
         
     def run(self):
         for episode in range(NUM_EPISODE):
-            obs = self.env.reset()
             history = self.run_to_goal(episode)
             self.update_policy(history, episode)
+            torch.save(self.model.state_dict(), self.data_path)
+            print('finish episode {0}'.format(episode))
 
-        torch.save(self.model.state_dict(), self.data_path)
         self.env.close()
 
 class SonicDiscretizer(gym.ActionWrapper):
