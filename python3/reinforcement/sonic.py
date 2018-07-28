@@ -12,11 +12,12 @@ import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
+from collections import namedtuple 
 
 NUM_EPISODE = 500
 NUM_STEPS = 2000
 LEARNING_RATE = 0.0001
-GAMMA = 0.999
+GAMMA = 0.99
 DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
 
 def make_env(stack=True, scale_rew=True):
@@ -55,12 +56,14 @@ class Net(nn.Module):
         return F.softmax(self.fc2(x))
 
 class Environment:
-    def __init__(self, data_path):
+    def __init__(self, data_path, is_saved):
         self.env = make_env()
         self.model = Net(self.env.action_space.n)
         if data_path:
             self.model.load_state_dict(torch.load(data_path))
         self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
+        self.is_saved = is_saved
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
     def prepro(self, I):
@@ -76,7 +79,7 @@ class Environment:
         print('start run_to_goal')
         observation = self.env.reset()
         state_prev = None
-        history = []
+        history = [[] for _ in range(0,3)]
 
         self.model.eval()
 
@@ -86,8 +89,8 @@ class Environment:
            state_prev = state
 
            tensor = torch.tensor(state_diff, dtype=torch.float32).unsqueeze(0)
-           output = self.model(tensor).squeeze(0)
-           props = output.data.numpy()
+           output = self.model(tensor)
+           props = output.squeeze(0).data.numpy()
 
            action_index = np.random.choice(range(0, self.env.action_space.n), p=props)
 
@@ -96,11 +99,13 @@ class Environment:
            self.env.render()
            print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
 
-           history.append([step, action_index, reward, output])
+           history[0].append(action_index)
+           history[1].append(reward)
+           history[2] = torch.cat([history[2], output]) if step != 0 else output
 
            if done:
                print('done')
-               history[-1][2] += info['x'] * 0.001
+               history[1][-1] += info['x'] * 0.0002
                break
 
            observation = next_observation
@@ -109,9 +114,10 @@ class Environment:
 
     def discount_reward(self, rewards):
         print('start discount_reward')
-        discounted_rewards = np.zeros((rewards.size, self.env.action_space.n))
+        size = len(rewards)
+        discounted_rewards = np.zeros((size, self.env.action_space.n))
         running_add = 0
-        for i in range(rewards.size)[::-1]:
+        for i in range(size)[::-1]:
             running_add = running_add * GAMMA + rewards[i]
             for j in range(0, self.env.action_space.n):
                 discounted_rewards[i][j] = running_add
@@ -125,11 +131,14 @@ class Environment:
         print('start update_policy')
         self.model.train()
 
-        rewards = np.zeros((len(history)))
-        targets = np.zeros((len(history), self.env.action_space.n))
-        for i, entry in enumerate(history):
-            rewards[i] = entry[2]
-            targets[i][entry[1]] = 1
+        actions = history[0]
+        rewards = history[1]
+        outputs = history[2]
+        print(actions, rewards, outputs)
+
+        targets = np.zeros((len(actions), self.env.action_space.n))
+        for i in range(0, len(actions)):
+            targets[i][actions[i]] = 1
             
         discounted_rewards = self.discount_reward(rewards)
         targets = targets * discounted_rewards
@@ -137,11 +146,8 @@ class Environment:
         targets.reshape(-1, self.env.action_space.n)
         targets = torch.tensor(targets, dtype=torch.float32)
 
-        self.optimizer.zero_grad()
-        for i, entry in enumerate(history):
-            print(entry[3], targets[i])
-            loss = F.smooth_l1_loss(entry[3], targets[i])
-            loss.backward()
+        loss = F.smooth_l1_loss(outputs, targets)
+        loss.backward()
 
         self.optimizer.step()
         
@@ -149,7 +155,8 @@ class Environment:
         for episode in range(NUM_EPISODE):
             history = self.run_to_goal(episode)
             self.update_policy(history, episode)
-            torch.save(self.model.state_dict(), self.data_path)
+            if self.is_saved:
+                torch.save(self.model.state_dict(), self.data_path)
             print('finish episode {0}'.format(episode))
 
         self.env.close()
@@ -214,9 +221,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('-p', '--path', help='path to model data file')
+    parser.add_argument('--save', type=bool default=True help='model parameters are saved')
     args = parser.parse_args(argv)
 
-    env = Environment(args.path)
+    env = Environment(args.path, args.save)
     env.run()
 
 
