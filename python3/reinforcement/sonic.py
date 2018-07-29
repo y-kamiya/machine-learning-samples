@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from collections import namedtuple 
 
 NUM_EPISODE = 500
-NUM_STEPS = 2000
+NUM_STEPS = 1000
 LEARNING_RATE = 0.0001
 GAMMA = 0.99
 DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
@@ -56,13 +56,13 @@ class Net(nn.Module):
         return F.softmax(self.fc2(x))
 
 class Environment:
-    def __init__(self, data_path, is_saved):
+    def __init__(self, data_path, nosave):
         self.env = make_env()
         self.model = Net(self.env.action_space.n)
         if data_path:
             self.model.load_state_dict(torch.load(data_path))
         self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
-        self.is_saved = is_saved
+        self.is_saved = not nosave
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
@@ -157,6 +157,7 @@ class Environment:
             self.update_policy(history, episode)
             if self.is_saved:
                 torch.save(self.model.state_dict(), self.data_path)
+
             print('finish episode {0}'.format(episode))
 
         self.env.close()
@@ -221,10 +222,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('-p', '--path', help='path to model data file')
-    parser.add_argument('--save', type=bool default=True help='model parameters are saved')
+    parser.add_argument('--nosave', action='store_true', help='model parameters are saved')
     args = parser.parse_args(argv)
 
-    env = Environment(args.path, args.save)
+    env = Environment(args.path, args.nosave)
     env.run()
 
 
