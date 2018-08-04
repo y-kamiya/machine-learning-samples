@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from collections import namedtuple 
 
 NUM_EPISODE = 500
-NUM_STEPS = 1000
+NUM_STEPS = 3000
 LEARNING_RATE = 0.0001
 GAMMA = 0.99
 DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
@@ -28,6 +28,7 @@ def make_env(stack=True, scale_rew=True):
     # env.auto_record('./data')
     env = gym.wrappers.TimeLimit(env, max_episode_steps=NUM_STEPS)
     env = SonicDiscretizer(env)
+    env = AllowBacktracking(env)
     if scale_rew:
         env = RewardScaler(env)
     env = WarpFrame(env)
@@ -95,9 +96,9 @@ class Environment:
            action_index = np.random.choice(range(0, self.env.action_space.n), p=props)
 
            next_observation, reward, done, info = self.env.step(action_index)
-           print(info)
+           # print(info)
            self.env.render()
-           print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
+           # print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
 
            history[0].append(action_index)
            history[1].append(reward)
@@ -105,7 +106,7 @@ class Environment:
 
            if done:
                print('done')
-               history[1][-1] += info['x'] * 0.0002
+               history[1][-1] += 0.01 if 0 < info['score'] else -0.01
                break
 
            observation = next_observation
