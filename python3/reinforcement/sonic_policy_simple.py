@@ -14,19 +14,19 @@ from torch import optim
 import torch.nn.functional as F
 from collections import namedtuple 
 
-NUM_EPISODE = 500
-NUM_STEPS = 3000
+NUM_EPISODES_DEFAULT = 100
+NUM_STEPS_DEFAULT = 3000
 LEARNING_RATE = 0.0001
 GAMMA = 0.99
 DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
 
-def make_env(stack=True, scale_rew=True):
+def make_env(num_steps, stack=True, scale_rew=True):
     """
     Create an environment with some standard wrappers.
     """
     env = retro.make(game='SonicTheHedgehog-Genesis', state='GreenHillZone.Act1')
     # env.auto_record('./data')
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=NUM_STEPS)
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=num_steps)
     env = SonicDiscretizer(env)
     env = AllowBacktracking(env)
     if scale_rew:
@@ -57,13 +57,19 @@ class Net(nn.Module):
         return F.softmax(self.fc2(x))
 
 class Environment:
-    def __init__(self, data_path, nosave):
-        self.env = make_env()
+    def __init__(self, args):
+        self.env = make_env(args.steps)
         self.model = Net(self.env.action_space.n)
+
+        data_path = args.path
         if data_path:
             self.model.load_state_dict(torch.load(data_path))
         self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
-        self.is_saved = not nosave
+
+        self.is_saved = not args.nosave
+        self.is_render = args.render
+        self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
+        self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
@@ -84,7 +90,7 @@ class Environment:
 
         self.model.eval()
 
-        for step in range(0, NUM_STEPS):
+        for step in range(0, self.num_steps):
            state = self.prepro(observation)
            state_diff = state - state_prev if state_prev is not None else np.zeros(4*84*84).reshape(4,84,84)
            state_prev = state
@@ -97,7 +103,8 @@ class Environment:
 
            next_observation, reward, done, info = self.env.step(action_index)
            # print(info)
-           self.env.render()
+           if self.is_render:
+               self.env.render()
            # print("step: {0}, action: {1}, reward: {2}".format(step, action_index, reward))
 
            history[0].append(action_index)
@@ -153,7 +160,7 @@ class Environment:
         self.optimizer.step()
         
     def run(self):
-        for episode in range(NUM_EPISODE):
+        for episode in range(self.num_episodes):
             history = self.run_to_goal(episode)
             self.update_policy(history, episode)
             if self.is_saved:
@@ -224,9 +231,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('-p', '--path', help='path to model data file')
     parser.add_argument('--nosave', action='store_true', help='model parameters are saved')
+    parser.add_argument('--steps', type=int, help='step count')
+    parser.add_argument('--episodes', type=int, help='episode count')
+    parser.add_argument('--render', action='store_true', help='render game')
     args = parser.parse_args(argv)
 
-    env = Environment(args.path, args.nosave)
+    env = Environment(args)
     env.run()
 
 
