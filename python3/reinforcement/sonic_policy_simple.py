@@ -18,7 +18,7 @@ NUM_EPISODES_DEFAULT = 100
 NUM_STEPS_DEFAULT = 3000
 LEARNING_RATE = 0.0001
 GAMMA = 0.99
-DATA_PATH_DEFAULT = 'data/model_state_sonic.dat'
+DATA_PATH_DEFAULT = 'model_state_sonic.dat'
 
 def make_env(num_steps, stack=True, scale_rew=True):
     """
