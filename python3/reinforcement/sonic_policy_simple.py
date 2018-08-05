@@ -98,7 +98,7 @@ class Environment:
 
            tensor = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
            output = self.model(tensor)
-           props = output.squeeze(0).data.numpy()
+           props = output.cpu().squeeze(0).data.numpy()
 
            action_index = np.random.choice(range(0, self.env.action_space.n), p=props)
 
