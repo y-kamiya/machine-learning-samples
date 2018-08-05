@@ -131,8 +131,8 @@ class Environment:
             for j in range(0, self.env.action_space.n):
                 discounted_rewards[i][j] = running_add
 
-        discounted_rewards -= np.mean(discounted_rewards)
-        discounted_rewards /= np.std(discounted_rewards)
+        # discounted_rewards -= np.mean(discounted_rewards)
+        # discounted_rewards /= np.std(discounted_rewards)
 
         return discounted_rewards
 
