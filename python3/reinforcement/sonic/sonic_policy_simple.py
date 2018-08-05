@@ -59,7 +59,8 @@ class Net(nn.Module):
 
 class Environment:
     def __init__(self, args):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = torch.device(device_name)
 
         self.env = make_env(args.steps)
         self.model = Net(self.env.action_space.n).to(device=self.device)
@@ -67,7 +68,7 @@ class Environment:
 
         data_path = args.path
         if data_path:
-            self.model.load_state_dict(torch.load(data_path))
+            self.model.load_state_dict(torch.load(data_path, map_location=device_name))
         self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
 
         self.is_saved = not args.nosave
