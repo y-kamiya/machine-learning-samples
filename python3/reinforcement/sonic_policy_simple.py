@@ -58,8 +58,11 @@ class Net(nn.Module):
 
 class Environment:
     def __init__(self, args):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         self.env = make_env(args.steps)
-        self.model = Net(self.env.action_space.n)
+        self.model = Net(self.env.action_space.n).to(device=self.device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
         data_path = args.path
         if data_path:
@@ -70,8 +73,6 @@ class Environment:
         self.is_render = args.render
         self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
         self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
-
-        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
 
     def prepro(self, I):
         ret = np.zeros((4, 84, 84))
@@ -95,7 +96,7 @@ class Environment:
            state_diff = state - state_prev if state_prev is not None else np.zeros(4*84*84).reshape(4,84,84)
            state_prev = state
 
-           tensor = torch.tensor(state_diff, dtype=torch.float32).unsqueeze(0)
+           tensor = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
            output = self.model(tensor)
            props = output.squeeze(0).data.numpy()
 
@@ -152,7 +153,7 @@ class Environment:
         targets = targets * discounted_rewards
 
         targets.reshape(-1, self.env.action_space.n)
-        targets = torch.tensor(targets, dtype=torch.float32)
+        targets = torch.tensor(targets, dtype=torch.float32, device=self.device)
 
         loss = F.smooth_l1_loss(outputs, targets)
         loss.backward()
