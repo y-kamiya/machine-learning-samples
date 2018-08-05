@@ -17,6 +17,7 @@ from collections import namedtuple
 NUM_EPISODES_DEFAULT = 100
 NUM_STEPS_DEFAULT = 3000
 LEARNING_RATE = 0.0001
+REWARD_RATE = 0.005
 GAMMA = 0.99
 DATA_PATH_DEFAULT = 'model_state_sonic.dat'
 
@@ -114,7 +115,7 @@ class Environment:
 
            if done:
                print('done')
-               history[1][-1] += 0.01 if 0 < info['score'] else -0.01
+               history[1][-1] += REWARD_RATE if 0 < info['score'] else -REWARD_RATE
                break
 
            observation = next_observation
@@ -199,7 +200,7 @@ class RewardScaler(gym.RewardWrapper):
     drastically.
     """
     def reward(self, reward):
-        return reward * 0.01
+        return reward * REWARD_RATE
 
 class AllowBacktracking(gym.Wrapper):
     """
