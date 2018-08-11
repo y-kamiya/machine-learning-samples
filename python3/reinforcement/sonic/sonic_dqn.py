@@ -1,0 +1,239 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import argparse
+import sys
+import gym
+from gym import wrappers
+import retro
+import numpy as np
+from collections import namedtuple 
+from baselines.common.atari_wrappers import WarpFrame, FrameStack
+from utils import SonicDiscretizer, RewardScaler, AllowBacktracking
+
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+
+GAMMA = 0.99
+NUM_STEPS_DEFAULT = 2500
+NUM_EPISODES_DEFAULT = 400
+NUM_STATES = 4
+
+def make_env(num_steps, stack=True, scale_rew=True):
+    """
+    Create an environment with some standard wrappers.
+    """
+    env = retro.make(game='SonicTheHedgehog-Genesis', state='GreenHillZone.Act1')
+    # env.auto_record('./data')
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=num_steps)
+    env = SonicDiscretizer(env)
+    env = AllowBacktracking(env)
+    if scale_rew:
+        env = RewardScaler(env)
+    env = WarpFrame(env)
+    if stack:
+        env = FrameStack(env, NUM_STATES)
+    return env
+
+class ReplayMemory:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.index = 0
+
+    def push(self, state, action, state_next, reward):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+
+        self.memory[self.index] = Transition(state, action, state_next, reward)
+        self.index = (self.index + 1) % self.capacity
+
+    def sample(self, size):
+        return random.sample(self.memory, size)
+
+    def __len__(self):
+        return len(self.memory)
+
+import random
+import torch
+from torch import nn
+from torch import optim
+import torch.nn.functional as F
+from torch.autograd import Variable
+
+BATCH_SIZE = 32
+CAPACITY = 10000
+LEARNING_RATE = 0.0001
+
+class Net(nn.Module):
+    def __init__(self, num_states, num_actions):
+        super(Net, self).__init__()
+        self.num_states = num_states
+        self.num_actions = num_actions
+
+        self.conv1 = nn.Conv2d(num_states, 32, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
+        self.fc1 = nn.Linear(21 * 21 * 64, 256)
+        self.fc2 = nn.Linear(256, num_actions)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view([-1, 21 * 21 * 64])
+        x = self.fc1(x)
+        x = F.dropout(x, p=0.4, training=self.training)
+        return F.softmax(self.fc2(x))
+
+class Brain:
+    def __init__(self, num_states, num_actions):
+        self.num_states = num_states
+        self.num_actions = num_actions
+
+        self.memory = ReplayMemory(CAPACITY)
+
+        self.model = Net(num_states, num_actions)
+        print(self.model)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
+    
+    def reply(self):
+        if (len(self.memory) < BATCH_SIZE):
+            return
+
+        transitions = self.memory.sample(BATCH_SIZE)
+
+        batch = Transition(*zip(*transitions))
+
+        non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
+
+        state_batch = Variable(torch.cat(batch.state))
+        action_batch = Variable(torch.cat(batch.action))
+        reward_batch = Variable(torch.cat(batch.reward))
+        non_final_next_state = Variable(torch.cat([s for s in batch.next_state if s is not None]))
+        
+        self.model.eval()
+
+        state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
+
+        next_state_values = Variable(torch.zeros(BATCH_SIZE).type(torch.FloatTensor))
+        next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
+
+        expected_state_action_values = reward_batch + GAMMA * next_state_values
+        
+        self.model.train()
+
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+    def decide_action(self, state, episode):
+        epsilon = 0.5 * (1 / (episode + 1))
+
+        if epsilon < random.uniform(0, 1):
+            self.model.eval()
+            action = self.model(state).data.max(1)[1].view(1, 1)
+        else:
+            action = torch.LongTensor([[random.randrange(self.num_actions)]])
+
+        return action
+
+class Agent:
+    def __init__(self, num_states, num_actions):
+        self.num_states = num_states
+        self.num_actions = num_actions
+        self.brain = Brain(num_states, num_actions)
+
+    def update_q_function(self):
+        self.brain.reply()
+
+    def get_action(self, state, step):
+        return self.brain.decide_action(state, step)
+
+    def memory(self, state, action, state_next, reward):
+        return self.brain.memory.push(state, action, state_next, reward)
+        
+class Environment:
+    def __init__(self):
+        device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = torch.device(device_name)
+        self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
+        self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
+
+        env = make_env(self.num_steps)
+        self.env = wrappers.Monitor(env, '/tmp/gym/sonic_dqn', force=True)
+
+        data_path = args.path
+        if data_path:
+            self.model.load_state_dict(torch.load(data_path, map_location=device_name))
+        # self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
+
+        self.is_saved = not args.nosave
+        self.is_render = args.render
+
+        self.num_states = NUM_STATES
+        self.num_actions = self.env.action_space.n
+        self.agent = Agent(self.num_states, self.num_actions)
+
+    def prepro(self, I):
+        ret = np.zeros((4, 84, 84))
+        # I = I[::4,::4, :] # downsample by factor of 2
+        ret[0] = I[:, :, 0]
+        ret[1] = I[:, :, 1]
+        ret[2] = I[:, :, 2]
+        ret[3] = I[:, :, 3]
+        return ret
+
+    def run(self):
+        for episode in range(self.num_episodes):
+            observation = self.env.reset()
+            state = self.prepro(observation)
+            state_diff = np.zeros(4*84*84).reshape(4,84,84)
+            tensor_state = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
+
+            for step in range(self.num_steps):
+                action = self.agent.get_action(tensor_state, episode)
+                print(action)
+
+                observation_next, reward, done, _ = self.env.step(action.item())
+                if self.is_render:
+                    self.env.render()
+
+                if done:
+                    state_next = None
+                    reward = torch.FloatTensor([-1.0])
+                else:
+                    state_next = self.prepro(observation_next)
+                    state_diff = state_next - state
+                    tensor_state_next = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
+                    reward = torch.tensor([reward], dtype=torch.float32)
+
+                if not self.is_render:
+                    self.agent.memory(tensor_state, action, tensor_state_next, reward)
+                    self.agent.update_q_function()
+
+                state = state_next
+                tensor_state = tensor_state_next
+
+                if done:
+                    print('episode: {0}'.format(episode))
+                    break
+
+        self.env.close()
+        
+if __name__ == '__main__':
+    argv = sys.argv[1:]
+
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('-p', '--path', help='path to model data file')
+    parser.add_argument('--nosave', action='store_true', help='model parameters are saved')
+    parser.add_argument('--steps', type=int, help='step count')
+    parser.add_argument('--episodes', type=int, help='episode count')
+    parser.add_argument('--render', action='store_true', help='render game')
+    args = parser.parse_args(argv)
+
+    env = Environment()
+    env.run()
+
+
