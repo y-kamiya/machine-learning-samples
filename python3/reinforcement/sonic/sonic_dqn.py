@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 import argparse
 import sys
 import gym
@@ -197,6 +198,7 @@ class Environment:
             state_diff = np.zeros(4*84*84).reshape(4,84,84)
             tensor_state = torch.from_numpy(state_diff).to(self.device, dtype=torch.float32).unsqueeze(0)
 
+            start_time = time.time()
             for step in range(self.num_steps):
                 tensor_action = self.agent.get_action(tensor_state, episode)
                 action = tensor_action.cpu().item()
@@ -229,6 +231,8 @@ class Environment:
             if self.is_saved:
                 print(self.data_path)
                 torch.save(self.get_model().state_dict(), self.data_path)
+
+            print('episode {0} elapsed time {1} sec'.format(episode, time.time() - start_time))
 
         self.env.close()
         
