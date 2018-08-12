@@ -18,6 +18,7 @@ GAMMA = 0.99
 NUM_STEPS_DEFAULT = 2500
 NUM_EPISODES_DEFAULT = 400
 NUM_STATES = 4
+REWARD_RATE = 0.01
 DATA_PATH_DEFAULT = 'model_state_sonic_dqn.dat'
 
 def make_env(num_steps, stack=True, scale_rew=True):
@@ -29,7 +30,7 @@ def make_env(num_steps, stack=True, scale_rew=True):
     env = SonicDiscretizer(env)
     env = AllowBacktracking(env)
     if scale_rew:
-        env = RewardScaler(env)
+        env = RewardScaler(env, REWARD_RATE)
     env = WarpFrame(env)
     if stack:
         env = FrameStack(env, NUM_STATES)
@@ -206,16 +207,16 @@ class Environment:
 
                 if done:
                     state_next = None
-                    reward = torch.tensor([-1.0], dtype=torch.float32, device=self.device)
+                    tensor_reward = torch.tensor([-REWARD_RATE], dtype=torch.float32, device=self.device)
                 else:
                     state_next = self.prepro(observation_next)
                     state_diff = state_next - state
                     tensor_state_next = torch.from_numpy(state_diff).to(self.device, dtype=torch.float32).unsqueeze(0)
-                    reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
+                    tensor_reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
 
                 if not self.is_render:
-                    print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action, reward.item()))
-                    self.agent.memory(tensor_state, tensor_action, tensor_state_next, reward)
+                    print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action, tensor_reward.item()))
+                    self.agent.memory(tensor_state, tensor_action, tensor_state_next, tensor_reward)
                     self.agent.update_q_function()
 
                 state = state_next

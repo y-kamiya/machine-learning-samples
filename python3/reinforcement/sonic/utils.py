@@ -35,8 +35,12 @@ class RewardScaler(gym.RewardWrapper):
     This is incredibly important and effects performance
     drastically.
     """
+    def __init__(self, env, rate):
+        super(RewardScaler, self).__init__(env)
+        self.rate = rate
+
     def reward(self, reward):
-        return reward * 0.01
+        return reward * self.rate
 
 class AllowBacktracking(gym.Wrapper):
     """
