@@ -18,13 +18,13 @@ GAMMA = 0.99
 NUM_STEPS_DEFAULT = 2500
 NUM_EPISODES_DEFAULT = 400
 NUM_STATES = 4
+DATA_PATH_DEFAULT = 'model_state_sonic_dqn.dat'
 
 def make_env(num_steps, stack=True, scale_rew=True):
     """
     Create an environment with some standard wrappers.
     """
     env = retro.make(game='SonicTheHedgehog-Genesis', state='GreenHillZone.Act1')
-    # env.auto_record('./data')
     env = gym.wrappers.TimeLimit(env, max_episode_steps=num_steps)
     env = SonicDiscretizer(env)
     env = AllowBacktracking(env)
@@ -98,7 +98,7 @@ class Brain:
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
     
     def reply(self):
-        if (len(self.memory) < BATCH_SIZE):
+        if (len(self.memory) < 1000):
             return
 
         transitions = self.memory.sample(BATCH_SIZE)
@@ -161,20 +161,22 @@ class Environment:
         self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
         self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
 
-        env = make_env(self.num_steps)
-        self.env = wrappers.Monitor(env, '/tmp/gym/sonic_dqn', force=True)
+        self.env = make_env(self.num_steps)
+        # self.env = wrappers.Monitor(env, '/tmp/gym/sonic_dqn', force=True)
+        self.num_states = NUM_STATES
+        self.num_actions = self.env.action_space.n
+        self.agent = Agent(self.num_states, self.num_actions)
 
         data_path = args.path
         if data_path:
-            self.model.load_state_dict(torch.load(data_path, map_location=device_name))
-        # self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
+            self.get_model().load_state_dict(torch.load(data_path, map_location=device_name))
+        self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
 
         self.is_saved = not args.nosave
         self.is_render = args.render
 
-        self.num_states = NUM_STATES
-        self.num_actions = self.env.action_space.n
-        self.agent = Agent(self.num_states, self.num_actions)
+    def get_model(self):
+        return self.agent.brain.model
 
     def prepro(self, I):
         ret = np.zeros((4, 84, 84))
@@ -194,7 +196,6 @@ class Environment:
 
             for step in range(self.num_steps):
                 action = self.agent.get_action(tensor_state, episode)
-                print(action)
 
                 observation_next, reward, done, _ = self.env.step(action.item())
                 if self.is_render:
@@ -210,6 +211,7 @@ class Environment:
                     reward = torch.tensor([reward], dtype=torch.float32)
 
                 if not self.is_render:
+                    print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action.item(), reward.item()))
                     self.agent.memory(tensor_state, action, tensor_state_next, reward)
                     self.agent.update_q_function()
 
@@ -217,8 +219,12 @@ class Environment:
                 tensor_state = tensor_state_next
 
                 if done:
-                    print('episode: {0}'.format(episode))
+                    print('done')
                     break
+
+            if self.is_saved:
+                print(self.data_path)
+                torch.save(self.get_model().state_dict(), self.data_path)
 
         self.env.close()
         
