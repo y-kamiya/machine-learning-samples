@@ -95,7 +95,7 @@ class Brain:
 
         self.memory = ReplayMemory(CAPACITY)
 
-        self.model = Net(num_states, num_actions)
+        self.model = Net(num_states, num_actions).to(device=device)
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
     
