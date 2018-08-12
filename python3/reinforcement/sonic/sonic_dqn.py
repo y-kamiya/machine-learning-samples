@@ -62,6 +62,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 BATCH_SIZE = 32
+SIZE_REPLY_START = 1000
 CAPACITY = 10000
 LEARNING_RATE = 0.0001
 
@@ -87,9 +88,10 @@ class Net(nn.Module):
         return F.softmax(self.fc2(x))
 
 class Brain:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, num_states, num_actions, device):
         self.num_states = num_states
         self.num_actions = num_actions
+        self.device = device
 
         self.memory = ReplayMemory(CAPACITY)
 
@@ -98,7 +100,7 @@ class Brain:
         self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
     
     def reply(self):
-        if (len(self.memory) < 1000):
+        if (len(self.memory) < SIZE_REPLY_START):
             return
 
         transitions = self.memory.sample(BATCH_SIZE)
@@ -107,16 +109,16 @@ class Brain:
 
         non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
 
-        state_batch = Variable(torch.cat(batch.state))
-        action_batch = Variable(torch.cat(batch.action))
-        reward_batch = Variable(torch.cat(batch.reward))
-        non_final_next_state = Variable(torch.cat([s for s in batch.next_state if s is not None]))
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+        non_final_next_state = torch.cat([s for s in batch.next_state if s is not None])
         
         self.model.eval()
 
         state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
 
-        next_state_values = Variable(torch.zeros(BATCH_SIZE).type(torch.FloatTensor))
+        next_state_values = torch.zeros(BATCH_SIZE).to(self.device, dtype=torch.float32)
         next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
 
         expected_state_action_values = reward_batch + GAMMA * next_state_values
@@ -135,15 +137,15 @@ class Brain:
             self.model.eval()
             action = self.model(state).data.max(1)[1].view(1, 1)
         else:
-            action = torch.LongTensor([[random.randrange(self.num_actions)]])
+            action = torch.tensor([[random.randrange(self.num_actions)]], dtype=torch.int64, device=self.device)
 
         return action
 
 class Agent:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, num_states, num_actions, device):
         self.num_states = num_states
         self.num_actions = num_actions
-        self.brain = Brain(num_states, num_actions)
+        self.brain = Brain(num_states, num_actions, device)
 
     def update_q_function(self):
         self.brain.reply()
@@ -165,7 +167,7 @@ class Environment:
         # self.env = wrappers.Monitor(env, '/tmp/gym/sonic_dqn', force=True)
         self.num_states = NUM_STATES
         self.num_actions = self.env.action_space.n
-        self.agent = Agent(self.num_states, self.num_actions)
+        self.agent = Agent(self.num_states, self.num_actions, self.device)
 
         data_path = args.path
         if data_path:
@@ -192,27 +194,28 @@ class Environment:
             observation = self.env.reset()
             state = self.prepro(observation)
             state_diff = np.zeros(4*84*84).reshape(4,84,84)
-            tensor_state = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
+            tensor_state = torch.from_numpy(state_diff).to(self.device, dtype=torch.float32).unsqueeze(0)
 
             for step in range(self.num_steps):
-                action = self.agent.get_action(tensor_state, episode)
+                tensor_action = self.agent.get_action(tensor_state, episode)
+                action = tensor_action.cpu().item()
 
-                observation_next, reward, done, _ = self.env.step(action.item())
+                observation_next, reward, done, _ = self.env.step(action)
                 if self.is_render:
                     self.env.render()
 
                 if done:
                     state_next = None
-                    reward = torch.FloatTensor([-1.0])
+                    reward = torch.tensor([-1.0], dtype=torch.float32, device=self.device)
                 else:
                     state_next = self.prepro(observation_next)
                     state_diff = state_next - state
-                    tensor_state_next = torch.tensor(state_diff, dtype=torch.float32, device=self.device).unsqueeze(0)
-                    reward = torch.tensor([reward], dtype=torch.float32)
+                    tensor_state_next = torch.from_numpy(state_diff).to(self.device, dtype=torch.float32).unsqueeze(0)
+                    reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
 
                 if not self.is_render:
-                    print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action.item(), reward.item()))
-                    self.agent.memory(tensor_state, action, tensor_state_next, reward)
+                    print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action, reward.item()))
+                    self.agent.memory(tensor_state, tensor_action, tensor_state_next, reward)
                     self.agent.update_q_function()
 
                 state = state_next
