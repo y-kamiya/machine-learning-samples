@@ -173,6 +173,7 @@ class Environment:
 
         data_path = args.path
         if data_path:
+            print('load data from {0}'.format(data_path))
             self.get_model().load_state_dict(torch.load(data_path, map_location=device_name))
         self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
 
@@ -203,7 +204,7 @@ class Environment:
                 tensor_action = self.agent.get_action(tensor_state, episode)
                 action = tensor_action.cpu().item()
 
-                observation_next, reward, done, _ = self.env.step(action)
+                observation_next, reward, done, info = self.env.step(action)
                 if self.is_render:
                     self.env.render()
 
@@ -232,6 +233,7 @@ class Environment:
                 print(self.data_path)
                 torch.save(self.get_model().state_dict(), self.data_path)
 
+            print('episode {0} info {1}'.format(episode, info))
             print('episode {0} elapsed time {1} sec'.format(episode, time.time() - start_time))
 
         self.env.close()
