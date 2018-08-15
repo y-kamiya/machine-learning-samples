@@ -63,7 +63,7 @@ from torch import optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-BATCH_SIZE = 128
+BATCH_SIZE = 32
 SIZE_REPLY_START = 1000
 CAPACITY = 10000
 LEARNING_RATE = 0.0001
