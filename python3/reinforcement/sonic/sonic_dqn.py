@@ -63,7 +63,7 @@ from torch import optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-BATCH_SIZE = 32
+BATCH_SIZE = 128
 SIZE_REPLY_START = 1000
 CAPACITY = 10000
 LEARNING_RATE = 0.0001
@@ -219,8 +219,9 @@ class Environment:
 
                 if not self.is_render:
                     print('episode {0}, step {1}, action {2}, reward {3}'.format(episode, step, action, tensor_reward.item()))
-                    self.agent.memory(tensor_state, tensor_action, tensor_state_next, tensor_reward)
-                    self.agent.update_q_function()
+                    if step % BATCH_SIZE == 0 or step == self.num_steps - 1:
+                        self.agent.memory(tensor_state, tensor_action, tensor_state_next, tensor_reward)
+                        self.agent.update_q_function()
 
                 state = state_next
                 tensor_state = tensor_state_next
