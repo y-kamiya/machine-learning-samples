@@ -174,7 +174,7 @@ class Environment:
                 state = state_next
 
                 if done:
-                    print('episode: {0}, step: {1}'.format(episode, self.total_step.mean()))
+                    print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
                     break
 
                 if episode_final:
