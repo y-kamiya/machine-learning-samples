@@ -38,25 +38,11 @@ import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
-from torch.autograd import Variable
+from model import NetFC, DuelingNetFC
+
 
 BATCH_SIZE = 32
 CAPACITY = 10000
-
-class Net(nn.Module):
-    def __init__(self, num_states, num_actions):
-        super(Net, self).__init__()
-        self.num_states = num_states
-        self.num_actions = num_actions
-
-        self.fc1 = nn.Linear(self.num_states, 32)
-        self.fc2 = nn.Linear(32, 32)
-        self.fc3 = nn.Linear(32, self.num_actions)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
 
 class Brain:
     def __init__(self, num_states, num_actions):
@@ -65,7 +51,7 @@ class Brain:
 
         self.memory = ReplayMemory(CAPACITY)
 
-        self.model = Net(num_states, num_actions)
+        self.model = DuelingNetFC(num_states, num_actions)
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
