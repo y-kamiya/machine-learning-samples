@@ -79,16 +79,16 @@ class Brain:
 
         non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
 
-        state_batch = Variable(torch.cat(batch.state))
-        action_batch = Variable(torch.cat(batch.action))
-        reward_batch = Variable(torch.cat(batch.reward))
-        non_final_next_state = Variable(torch.cat([s for s in batch.next_state if s is not None]))
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
+        non_final_next_state = torch.cat([s for s in batch.next_state if s is not None])
         
         self.model.eval()
 
         state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
 
-        next_state_values = Variable(torch.zeros(BATCH_SIZE).type(torch.FloatTensor))
+        next_state_values = torch.zeros(BATCH_SIZE).type(torch.FloatTensor)
         next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
 
         expected_state_action_values = reward_batch + GAMMA * next_state_values
@@ -105,7 +105,7 @@ class Brain:
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
-            action = self.model(Variable(state)).data.max(1)[1].view(1, 1)
+            action = self.model(state).data.max(1)[1].view(1, 1)
         else:
             action = torch.LongTensor([[random.randrange(self.num_actions)]])
 
@@ -137,7 +137,6 @@ class Environment:
 
     def run(self):
         complete_episodes = 0
-        episode_final = False
 
         for episode in range(NUM_EPISODE):
             observation = self.env.reset()
@@ -145,9 +144,6 @@ class Environment:
             state = torch.unsqueeze(state, 0)
 
             for step in range(MAX_STEPS):
-                if episode_final:
-                    frames.append(self.env.render(mode='rgb_array'))
-
                 action = self.agent.get_action(state, episode)
 
                 observation_next, _, done, _ = self.env.step(action.item())
@@ -177,30 +173,12 @@ class Environment:
                     print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
                     break
 
-                if episode_final:
-                    # display_frames_as_gif(frames)
-                    break
-
                 if 10 <= complete_episodes:
                     print('success 10 times in sequence')
-                    frames = []
-                    episode_final = True
                     
         self.env.close()
         
 if __name__ == '__main__':
-    # frames = []
-    # env = gym.make(ENV)
-    # env.reset()
-    # for _ in range(0, 200):
-    #     frames.append(env.render(mode='rgb_array'))
-    #     action = np.random.choice(2)
-    #     observation, reward, done, info = env.step(action)
-    #     if done:
-    #         break
-    #
-    # env.close()
-    # display_frames_as_gif(frames)
     env = Environment()
     env.run()
 
