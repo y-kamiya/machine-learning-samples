@@ -6,6 +6,11 @@ import gym
 from gym import wrappers
 import numpy as np
 from collections import namedtuple 
+import random
+import torch
+from torch import optim
+import torch.nn.functional as F
+from model import DuelingNetFC
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -13,6 +18,9 @@ ENV = 'CartPole-v0'
 GAMMA = 0.99
 MAX_STEPS = 200
 NUM_EPISODE = 500
+BATCH_SIZE = 32
+CAPACITY = 10000
+STEPS_TO_UPDATE_TARGET = 10
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -33,16 +41,7 @@ class ReplayMemory:
     def __len__(self):
         return len(self.memory)
 
-import random
-import torch
-from torch import nn
-from torch import optim
-import torch.nn.functional as F
-from model import NetFC, DuelingNetFC
 
-
-BATCH_SIZE = 32
-CAPACITY = 10000
 
 class Brain:
     def __init__(self, num_states, num_actions):
@@ -52,6 +51,7 @@ class Brain:
         self.memory = ReplayMemory(CAPACITY)
 
         self.model = DuelingNetFC(num_states, num_actions)
+        self.target_model = DuelingNetFC(num_states, num_actions)
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
@@ -91,16 +91,20 @@ class Brain:
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
-            action = self.model(state).data.max(1)[1].view(1, 1)
+            action = self.target_model(state).data.max(1)[1].view(1, 1)
         else:
             action = torch.LongTensor([[random.randrange(self.num_actions)]])
 
         return action
 
+    def update_target_model(self):
+        self.target_model.load_state_dict(self.model.state_dict())
+
 class Agent:
     def __init__(self, num_states, num_actions):
         self.num_states = num_states
         self.num_actions = num_actions
+        self.steps_accumulated = 0
         self.brain = Brain(num_states, num_actions)
 
     def update_q_function(self):
@@ -111,6 +115,14 @@ class Agent:
 
     def memory(self, state, action, state_next, reward):
         return self.brain.memory.push(state, action, state_next, reward)
+
+    def update_target_model(self):
+        self.steps_accumulated += 1
+
+        if STEPS_TO_UPDATE_TARGET <= self.steps_accumulated:
+            self.steps_accumulated = 0
+            self.brain.update_target_model()
+            return
         
 class Environment:
     def __init__(self):
@@ -150,8 +162,8 @@ class Environment:
                     state_next = torch.unsqueeze(state_next, 0)
 
                 self.agent.memory(state, action, state_next, reward)
-
                 self.agent.update_q_function()
+                self.agent.update_target_model();
 
                 state = state_next
 
