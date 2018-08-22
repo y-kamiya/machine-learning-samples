@@ -39,4 +39,5 @@ class DuelingNetFC(nn.Module):
         V = self.fcV(x)
         A = self.fcA(x)
 
-        return V.expand(-1, self.num_actions) + (A - A.mean(1).expand(-1, self.num_actions))
+        averageA = A.mean(1).unsqueeze(1)
+        return V.expand(-1, self.num_actions) + (A - averageA.expand(-1, self.num_actions))

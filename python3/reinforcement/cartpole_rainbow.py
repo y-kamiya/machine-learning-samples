@@ -161,6 +161,7 @@ class Environment:
 
                 if 10 <= complete_episodes:
                     print('success 10 times in sequence')
+                    break
                     
         self.env.close()
         
