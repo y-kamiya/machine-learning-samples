@@ -126,17 +126,24 @@ class Agent:
         
 class Environment:
     def __init__(self):
-        env = gym.make(ENV)
-        self.env = wrappers.Monitor(env, '/tmp/gym/cartpole_dqn', force=True)
+        self.env = gym.make(ENV)
+        # self.env = wrappers.Monitor(self.env, '/tmp/gym/cartpole_dqn', force=True)
         self.num_states = self.env.observation_space.shape[0]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(self.num_states, self.num_actions)
         self.total_step = np.zeros(10)
 
+    def is_complete(self, count):
+        return 10 <= count
+
     def run(self):
         complete_episodes = 0
 
         for episode in range(NUM_EPISODE):
+            if self.is_complete(complete_episodes):
+                print('success 10 times in sequence, total episode: {0}'.format(episode))
+                break
+
             observation = self.env.reset()
             state = torch.from_numpy(observation).type(torch.FloatTensor)
             state = torch.unsqueeze(state, 0)
@@ -170,14 +177,11 @@ class Environment:
                 if done:
                     print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
                     break
-
-                if 10 <= complete_episodes:
-                    print('success 10 times in sequence')
-                    break
                     
         self.env.close()
         
 if __name__ == '__main__':
-    env = Environment()
-    env.run()
+    for i in range(100):
+        env = Environment()
+        env.run()
 
