@@ -133,50 +133,55 @@ class Environment:
         self.agent = Agent(self.num_states, self.num_actions)
         self.total_step = np.zeros(10)
 
-    def is_complete(self, count):
-        return 10 <= count
+    def is_success_episode(self, step):
+        return 195 <= step
+
+    def run_episode(self, episode):
+        observation = self.env.reset()
+        state = torch.from_numpy(observation).type(torch.FloatTensor)
+        state = torch.unsqueeze(state, 0)
+
+        for step in range(MAX_STEPS):
+            action = self.agent.get_action(state, episode)
+
+            observation_next, _, done, _ = self.env.step(action.item())
+
+            if done:
+                state_next = None
+                self.total_step = np.hstack((self.total_step[1:], step + 1))
+                if self.is_success_episode(step):
+                    reward = torch.FloatTensor([1.0])
+                else:
+                    reward = torch.FloatTensor([-1.0])
+
+            else:
+                reward = torch.FloatTensor([0.0])
+                state_next = torch.from_numpy(observation_next).type(torch.FloatTensor)
+                state_next = torch.unsqueeze(state_next, 0)
+
+            self.agent.memory(state, action, state_next, reward)
+            self.agent.update_q_function()
+            self.agent.update_target_model();
+
+            state = state_next
+
+            if done:
+                print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
+                return self.is_success_episode(step)
 
     def run(self):
         complete_episodes = 0
 
         for episode in range(NUM_EPISODE):
-            if self.is_complete(complete_episodes):
+            if 10 <= complete_episodes:
                 print('success 10 times in sequence, total episode: {0}'.format(episode))
                 break
 
-            observation = self.env.reset()
-            state = torch.from_numpy(observation).type(torch.FloatTensor)
-            state = torch.unsqueeze(state, 0)
-
-            for step in range(MAX_STEPS):
-                action = self.agent.get_action(state, episode)
-
-                observation_next, _, done, _ = self.env.step(action.item())
-
-                if done:
-                    state_next = None
-                    self.total_step = np.hstack((self.total_step[1:], step + 1))
-                    if step < 195:
-                        reward = torch.FloatTensor([-1.0])
-                        complete_episodes = 0
-                    else:
-                        reward = torch.FloatTensor([1.0])
-                        complete_episodes = complete_episodes + 1
-
-                else:
-                    reward = torch.FloatTensor([0.0])
-                    state_next = torch.from_numpy(observation_next).type(torch.FloatTensor)
-                    state_next = torch.unsqueeze(state_next, 0)
-
-                self.agent.memory(state, action, state_next, reward)
-                self.agent.update_q_function()
-                self.agent.update_target_model();
-
-                state = state_next
-
-                if done:
-                    print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
-                    break
+            is_success = self.run_episode(episode)
+            if is_success:
+                complete_episodes += 1
+            else:
+                complete_episodes = 0
                     
         self.env.close()
         
