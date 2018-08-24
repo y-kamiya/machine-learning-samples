@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import gym
 from gym import wrappers
 import numpy as np
@@ -11,6 +12,7 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 from model import DuelingNetFC
+from config import Config
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -20,7 +22,6 @@ MAX_STEPS = 200
 NUM_EPISODE = 500
 BATCH_SIZE = 32
 CAPACITY = 10000
-STEPS_TO_UPDATE_TARGET = 10
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -44,14 +45,15 @@ class ReplayMemory:
 
 
 class Brain:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions):
+        self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
 
         self.memory = ReplayMemory(CAPACITY)
 
-        self.model = DuelingNetFC(num_states, num_actions)
-        self.target_model = DuelingNetFC(num_states, num_actions)
+        self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
+        self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
@@ -63,7 +65,7 @@ class Brain:
 
         batch = Transition(*zip(*transitions))
 
-        non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.uint8, device=self.config.device)
 
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
@@ -72,12 +74,13 @@ class Brain:
         
         self.model.eval()
 
-        state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
-
-        next_state_values = torch.zeros(BATCH_SIZE).type(torch.FloatTensor)
+        next_state_values = torch.zeros(BATCH_SIZE).to(self.config.device, dtype=torch.float32)
         next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
 
         expected_state_action_values = reward_batch + GAMMA * next_state_values
+
+        state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
+        state_action_values.to(self.config.device, dtype=torch.float32)
         
         self.model.train()
 
@@ -93,7 +96,8 @@ class Brain:
             self.model.eval()
             action = self.target_model(state).data.max(1)[1].view(1, 1)
         else:
-            action = torch.LongTensor([[random.randrange(self.num_actions)]])
+            rand = random.randrange(self.num_actions)
+            action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
 
         return action
 
@@ -101,11 +105,12 @@ class Brain:
         self.target_model.load_state_dict(self.model.state_dict())
 
 class Agent:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions):
+        self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
         self.steps_accumulated = 0
-        self.brain = Brain(num_states, num_actions)
+        self.brain = Brain(config, num_states, num_actions)
 
     def update_q_function(self):
         self.brain.reply()
@@ -119,18 +124,20 @@ class Agent:
     def update_target_model(self):
         self.steps_accumulated += 1
 
-        if STEPS_TO_UPDATE_TARGET <= self.steps_accumulated:
+        if self.config.num_steps_to_update_target <= self.steps_accumulated:
             self.steps_accumulated = 0
             self.brain.update_target_model()
             return
         
 class Environment:
-    def __init__(self):
+    def __init__(self, config):
+        print(config.device)
+        self.config = config
         self.env = gym.make(ENV)
         # self.env = wrappers.Monitor(self.env, '/tmp/gym/cartpole_dqn', force=True)
         self.num_states = self.env.observation_space.shape[0]
         self.num_actions = self.env.action_space.n
-        self.agent = Agent(self.num_states, self.num_actions)
+        self.agent = Agent(config, self.num_states, self.num_actions)
         self.total_step = np.zeros(10)
 
     def is_success_episode(self, step):
@@ -138,8 +145,7 @@ class Environment:
 
     def run_episode(self, episode):
         observation = self.env.reset()
-        state = torch.from_numpy(observation).type(torch.FloatTensor)
-        state = torch.unsqueeze(state, 0)
+        state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
         for step in range(MAX_STEPS):
             action = self.agent.get_action(state, episode)
@@ -150,14 +156,13 @@ class Environment:
                 state_next = None
                 self.total_step = np.hstack((self.total_step[1:], step + 1))
                 if self.is_success_episode(step):
-                    reward = torch.FloatTensor([1.0])
+                    reward = torch.tensor([1.0], dtype=torch.float32, device=self.config.device)
                 else:
-                    reward = torch.FloatTensor([-1.0])
+                    reward = torch.tensor([-1.0], dtype=torch.float32, device=self.config.device)
 
             else:
-                reward = torch.FloatTensor([0.0])
-                state_next = torch.from_numpy(observation_next).type(torch.FloatTensor)
-                state_next = torch.unsqueeze(state_next, 0)
+                reward = torch.tensor([0.0], dtype=torch.float32, device=self.config.device)
+                state_next = torch.from_numpy(observation_next).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
             self.agent.memory(state, action, state_next, reward)
             self.agent.update_q_function()
@@ -186,7 +191,10 @@ class Environment:
         self.env.close()
         
 if __name__ == '__main__':
-    for i in range(100):
-        env = Environment()
+    argv = sys.argv[1:]
+    config = Config(argv)
+
+    for i in range(config.num_epochs):
+        env = Environment(config)
         env.run()
 
