@@ -76,9 +76,10 @@ class Brain:
         self.model.eval()
 
         next_state_values = torch.zeros(BATCH_SIZE).to(self.config.device, dtype=torch.float32)
-        next_state_values[non_final_mask] = self.target_model(non_final_next_state).data.max(1)[0]
+        best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
+        next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
 
-        expected_state_action_values = reward_batch + GAMMA * next_state_values
+        expected_state_action_values = reward_batch + GAMMA * next_state_values.detach()
 
         state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
         state_action_values.to(self.config.device, dtype=torch.float32)
