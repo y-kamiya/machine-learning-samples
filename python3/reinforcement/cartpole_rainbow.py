@@ -54,6 +54,7 @@ class Brain:
 
         self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
         self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
+        self.target_model.eval()
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
@@ -75,7 +76,7 @@ class Brain:
         self.model.eval()
 
         next_state_values = torch.zeros(BATCH_SIZE).to(self.config.device, dtype=torch.float32)
-        next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
+        next_state_values[non_final_mask] = self.target_model(non_final_next_state).data.max(1)[0]
 
         expected_state_action_values = reward_batch + GAMMA * next_state_values
 
@@ -94,7 +95,7 @@ class Brain:
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
-            action = self.target_model(state).data.max(1)[1].view(1, 1)
+            action = self.model(state).data.max(1)[1].view(1, 1)
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
