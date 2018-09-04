@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import sys
+import time
 import gym
 from gym import wrappers
 import numpy as np
@@ -146,6 +147,7 @@ class Environment:
         return 195 <= step
 
     def run_episode(self, episode):
+        start_time = time.time()
         observation = self.env.reset()
         state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
@@ -173,7 +175,8 @@ class Environment:
             state = state_next
 
             if done:
-                print('episode: {0}, steps: {1}, mean steps {2}'.format(episode, step, self.total_step.mean()))
+                elapsed_time = round(time.time() - start_time, 3)
+                print('episode: {0}, steps: {1}, mean steps {2}, time: {3}'.format(episode, step, self.total_step.mean(), elapsed_time))
                 return self.is_success_episode(step)
 
     def run(self):
