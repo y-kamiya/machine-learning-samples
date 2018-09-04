@@ -17,6 +17,7 @@ class Config:
         parser.add_argument('--epochs', type=int, help='epoch count')
         parser.add_argument('--steps_to_update_target', type=int, help='count to update target model')
         parser.add_argument('--render', action='store_true', help='render game')
+        parser.add_argument('--use_per', action='store_true', help='render game')
         args = parser.parse_args(argv)
 
         device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -27,6 +28,7 @@ class Config:
 
         self.is_saved = not args.nosave
         self.is_render = args.render
+        self.use_per = args.use_per
         self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
         self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
         self.num_epochs = args.epochs if args.epochs != None else NUM_EPOCHS_DEFAULT

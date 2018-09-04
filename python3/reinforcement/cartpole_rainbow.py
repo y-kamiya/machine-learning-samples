@@ -87,8 +87,7 @@ class Brain:
         self.num_states = num_states
         self.num_actions = num_actions
 
-        # self.memory = ReplayMemory(CAPACITY)
-        self.memory = PERMemory(CAPACITY)
+        self.memory = PERMemory(CAPACITY) if config.use_per else ReplayMemory(CAPACITY)
 
         self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
         self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
@@ -144,7 +143,9 @@ class Brain:
 
     def add_memory(self, transition):
         values, expected_values = self._get_state_action_values([transition])
-        td_error = abs(values.item() - expected_values.item())
+        td_error = None
+        if self.config.use_per:
+            td_error = abs(values.item() - expected_values.item())
         self.memory.push(td_error, transition)
 
         if (len(self.memory) == MEMORY_SIZE_TO_START_REPLY):
