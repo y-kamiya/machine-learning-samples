@@ -24,7 +24,7 @@ MAX_STEPS = 200
 NUM_EPISODE = 500
 BATCH_SIZE = 32
 CAPACITY = 10000
-MEMORY_SIZE_TO_START_REPLY = 32
+MEMORY_SIZE_TO_START_REPLY = 1000
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -236,18 +236,26 @@ class Environment:
             if done:
                 elapsed_time = round(time.time() - start_time, 3)
                 print('episode: {0}, steps: {1}, mean steps {2}, time: {3}'.format(episode, step, self.total_step.mean(), elapsed_time))
-                return self.is_success_episode(step)
+                return step + 1
+
+        return MAX_STEPS
 
     def run(self):
         complete_episodes = 0
+
+        steps = 0
+        while True:
+            steps += self.run_episode(0)
+            if MEMORY_SIZE_TO_START_REPLY < steps:
+                break
 
         for episode in range(NUM_EPISODE):
             if 10 <= complete_episodes:
                 print('success 10 times in sequence, total episode: {0}'.format(episode))
                 break
 
-            is_success = self.run_episode(episode)
-            if is_success:
+            steps = self.run_episode(episode)
+            if self.is_success_episode(steps):
                 complete_episodes += 1
             else:
                 complete_episodes = 0
