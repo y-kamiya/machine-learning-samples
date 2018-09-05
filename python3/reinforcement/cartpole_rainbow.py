@@ -138,14 +138,12 @@ class Brain:
 
         if (indexes != None):
             for i, value in enumerate(values):
-                td_error = expected_values[i].item() - value.item()
-                self.memory.update(indexes[i], abs(td_error))
+                td_error = abs(expected_values[i].item() - value.item())
+                self.memory.update(indexes[i], td_error)
 
     def add_memory(self, transition):
         values, expected_values = self._get_state_action_values([transition])
-        td_error = None
-        if self.config.use_per:
-            td_error = abs(values.item() - expected_values.item())
+        td_error = abs(expected_values.item() - values.item())
         self.memory.push(td_error, transition)
 
         if (len(self.memory) == MEMORY_SIZE_TO_START_REPLY):
