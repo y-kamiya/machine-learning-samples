@@ -18,9 +18,10 @@ class Config:
         parser.add_argument('--steps_to_update_target', type=int, help='count to update target model')
         parser.add_argument('--render', action='store_true', help='render game')
         parser.add_argument('--use_per', action='store_true', help='render game')
+        parser.add_argument('--cpu', action='store_true', help='use cpu')
         args = parser.parse_args(argv)
 
-        device_name = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
         self.device = torch.device(device_name)
 
         data_path = args.path
