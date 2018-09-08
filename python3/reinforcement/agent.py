@@ -107,6 +107,7 @@ class Brain:
         self.num_actions = num_actions
 
         self.memory = PERMemory(CAPACITY) if config.use_per else ReplayMemory(CAPACITY)
+        self.multi_step_transitions = []
 
         self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
         self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
@@ -134,7 +135,8 @@ class Brain:
             best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
             next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
 
-        expected_values = reward_batch + GAMMA * next_state_values.detach()
+        gamma = GAMMA ** self.config.num_multi_step_reward
+        expected_values = reward_batch + gamma * next_state_values.detach()
 
         values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
         values.to(self.config.device, dtype=torch.float32)
@@ -161,12 +163,32 @@ class Brain:
                 self.memory.update(indexes[i], td_error)
 
     def add_memory(self, transition):
+        if 1 < self.config.num_multi_step_reward:
+            transition = self._get_multi_step_transition(transition)
+
+        if transition == None:
+            return
+
         values, expected_values = self._get_state_action_values([transition])
         td_error = abs(expected_values.item() - values.item())
         self.memory.push(td_error, transition)
 
         if (len(self.memory) == MEMORY_SIZE_TO_START_REPLY):
             print('start reply from next step')
+
+    def _get_multi_step_transition(self, transition):
+        self.multi_step_transitions.append(transition)
+        if len(self.multi_step_transitions) < self.config.num_multi_step_reward:
+            return None
+
+        nstep_reward = 0
+        for i in range(self.config.num_multi_step_reward):
+            r = self.multi_step_transitions[i].reward
+            nstep_reward += r * GAMMA ** i
+
+        state, action, _, _ = self.multi_step_transitions.pop(0)
+
+        return Transition(state, action, transition.next_state, nstep_reward)
 
     def decide_action(self, state, episode):
         epsilon = 0.5 * (1 / (episode + 1 + 0.001))
