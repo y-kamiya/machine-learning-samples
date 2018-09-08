@@ -2,19 +2,48 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numpy as np
 from collections import namedtuple 
 import random
 import torch
-from torch import nn
 from torch import optim
 import torch.nn.functional as F
-from torch.autograd import Variable
 
-BATCH_SIZE = 128
-CAPACITY = 10000
-GAMMA = 0.99
+from model import DuelingNetFC
+from config import Config
+from sum_tree import SumTree
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+
+GAMMA = 0.99
+BATCH_SIZE = 32
+CAPACITY = 10000
+MEMORY_SIZE_TO_START_REPLY = 1000
+
+class Agent:
+    def __init__(self, config, num_states, num_actions):
+        self.config = config
+        self.num_states = num_states
+        self.num_actions = num_actions
+        self.steps_accumulated = 0
+        self.brain = Brain(config, num_states, num_actions)
+
+    def learn(self):
+        self.brain.reply()
+
+    def get_action(self, state, step):
+        return self.brain.decide_action(state, step)
+
+    def observe(self, state, action, state_next, reward):
+        self.brain.add_memory(Transition(state, action, state_next, reward))
+
+    def update_target_model(self):
+        self.steps_accumulated += 1
+
+        if self.config.num_steps_to_update_target <= self.steps_accumulated:
+            self.steps_accumulated = 0
+            self.brain.update_target_model()
+            return
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -22,100 +51,160 @@ class ReplayMemory:
         self.memory = []
         self.index = 0
 
-    def push(self, state, action, state_next, reward):
+    def push(self, _, transition):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
 
-        self.memory[self.index] = Transition(state, action, state_next, reward)
+        self.memory[self.index] = transition
         self.index = (self.index + 1) % self.capacity
 
     def sample(self, size):
-        return random.sample(self.memory, size)
+        return (None, random.sample(self.memory, size))
+
+    def update(self, idx, td_error):
+        pass
 
     def __len__(self):
         return len(self.memory)
 
-class Net(nn.Module):
-    def __init__(self, num_states, num_actions):
-        super(Net, self).__init__()
-        self.num_states = num_states
-        self.num_actions = num_actions
+class PERMemory:
+    epsilon = 0.0001
+    alpha = 0.6
+    size = 0
 
-        self.fc1 = nn.Linear(self.num_states, 32)
-        self.fc2 = nn.Linear(32, 32)
-        self.fc3 = nn.Linear(32, self.num_actions)
+    def __init__(self, capacity):
+        self.tree = SumTree(capacity)
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+    def _getPriority(self, td_error):
+        return (td_error + self.epsilon) ** self.alpha
+
+    def push(self, td_error, transition):
+        self.size += 1
+        priority = self._getPriority(td_error)
+        self.tree.add(priority, transition)
+
+    def sample(self, size):
+        list = []
+        indexes = []
+        for rand in np.random.uniform(0, self.tree.total(), size):
+            (idx, _, data) = self.tree.get(rand)
+            list.append(data)
+            indexes.append(idx)
+
+        return (indexes, list)
+
+    def update(self, idx, td_error):
+        priority = self._getPriority(td_error)
+        self.tree.update(idx, priority)
+
+    def __len__(self):
+        return self.size
 
 class Brain:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions):
+        self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
 
-        self.memory = ReplayMemory(CAPACITY)
+        self.memory = PERMemory(CAPACITY) if config.use_per else ReplayMemory(CAPACITY)
 
-        self.model = Net(num_states, num_actions)
+        self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
+        self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
+        self.target_model.eval()
         print(self.model)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
-    def reply(self):
-        if (len(self.memory) < BATCH_SIZE):
-            return
-
-        transitions = self.memory.sample(BATCH_SIZE)
-
+    def _get_state_action_values(self, transitions):
+        batch_size = len(transitions)
         batch = Transition(*zip(*transitions))
 
-        non_final_mask = torch.ByteTensor(tuple(map(lambda s: s is not None, batch.next_state)))
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.uint8, device=self.config.device)
 
-        state_batch = Variable(torch.cat(batch.state))
-        action_batch = Variable(torch.cat(batch.action))
-        reward_batch = Variable(torch.cat(batch.reward))
-        non_final_next_state = Variable(torch.cat([s for s in batch.next_state if s is not None]))
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
         
         self.model.eval()
 
-        state_action_values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
+        next_state_values = torch.zeros(batch_size).to(self.config.device, dtype=torch.float32)
 
-        next_state_values = Variable(torch.zeros(BATCH_SIZE).type(torch.FloatTensor))
-        next_state_values[non_final_mask] = self.model(non_final_next_state).data.max(1)[0]
+        next_states = [s for s in batch.next_state if s is not None]
+        if len(next_states) != 0:
+            non_final_next_state = torch.cat(next_states)
+            best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
+            next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
 
-        expected_state_action_values = reward_batch + GAMMA * next_state_values
-        
+        expected_values = reward_batch + GAMMA * next_state_values.detach()
+
+        values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
+        values.to(self.config.device, dtype=torch.float32)
+
+        return (values, expected_values)
+
+    def reply(self):
+        if (len(self.memory) < MEMORY_SIZE_TO_START_REPLY):
+            return
+
+        indexes, transitions = self.memory.sample(BATCH_SIZE)
+        values, expected_values = self._get_state_action_values(transitions)
+
         self.model.train()
 
-        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+        loss = F.smooth_l1_loss(values, expected_values)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+        if (indexes != None):
+            for i, value in enumerate(values):
+                td_error = abs(expected_values[i].item() - value.item())
+                self.memory.update(indexes[i], td_error)
+
+    def add_memory(self, transition):
+        values, expected_values = self._get_state_action_values([transition])
+        td_error = abs(expected_values.item() - values.item())
+        self.memory.push(td_error, transition)
+
+        if (len(self.memory) == MEMORY_SIZE_TO_START_REPLY):
+            print('start reply from next step')
 
     def decide_action(self, state, episode):
         epsilon = 0.5 * (1 / (episode + 1))
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
-            action = self.model(Variable(state)).data.max(1)[1].view(1, 1)
+            action = self.model(state).data.max(1)[1].view(1, 1)
         else:
-            action = torch.LongTensor([[random.randrange(self.num_actions)]])
+            rand = random.randrange(self.num_actions)
+            action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
 
         return action
 
+    def update_target_model(self):
+        self.target_model.load_state_dict(self.model.state_dict())
+
 class Agent:
-    def __init__(self, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions):
+        self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
-        self.brain = Brain(num_states, num_actions)
+        self.steps_accumulated = 0
+        self.brain = Brain(config, num_states, num_actions)
 
-    def update_q_function(self):
+    def learn(self):
         self.brain.reply()
 
     def get_action(self, state, step):
         return self.brain.decide_action(state, step)
 
-    def memory(self, state, action, state_next, reward):
-        return self.brain.memory.push(state, action, state_next, reward)
-        
+    def observe(self, state, action, state_next, reward):
+        self.brain.add_memory(Transition(state, action, state_next, reward))
 
+    def update_target_model(self):
+        self.steps_accumulated += 1
+
+        if self.config.num_steps_to_update_target <= self.steps_accumulated:
+            self.steps_accumulated = 0
+            self.brain.update_target_model()
+            return
+        
