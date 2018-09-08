@@ -16,6 +16,8 @@ ENV = 'CartPole-v0'
 MAX_STEPS = 200
 NUM_EPISODE = 500
 MEMORY_SIZE_TO_START_REPLY = 1000
+NUM_STEPS_TO_SUCCEED = 195
+MEAN_STEPS_TO_SUCCEED = 150
 
 class Environment:
     def __init__(self, config):
@@ -26,10 +28,10 @@ class Environment:
         self.num_states = self.env.observation_space.shape[0]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(config, self.num_states, self.num_actions)
-        self.total_step = np.zeros(10)
+        self.total_step = np.zeros(100)
 
     def is_success_episode(self, step):
-        return 195 <= step
+        return NUM_STEPS_TO_SUCCEED <= step
 
     def run_episode(self, episode):
         start_time = time.time()
@@ -66,25 +68,19 @@ class Environment:
         return MAX_STEPS
 
     def run(self):
-        complete_episodes = 0
-
         steps = 0
         while True:
-            steps += self.run_episode(0)
+            steps += self.run_episode(-1)
             if MEMORY_SIZE_TO_START_REPLY < steps:
                 break
 
         for episode in range(NUM_EPISODE):
-            if 10 <= complete_episodes:
-                print('success 10 times in sequence, total episode: {0}'.format(episode))
+            if MEAN_STEPS_TO_SUCCEED <= self.total_step.mean():
+                print('over {0} steps of average last 100 episodes, last episode: {1}'.format(MEAN_STEPS_TO_SUCCEED, episode))
                 break
 
-            steps = self.run_episode(episode)
-            if self.is_success_episode(steps):
-                complete_episodes += 1
-            else:
-                complete_episodes = 0
-                    
+            _ = self.run_episode(episode)
+
         self.env.close()
         
 if __name__ == '__main__':

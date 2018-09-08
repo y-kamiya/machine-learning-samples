@@ -31,8 +31,8 @@ class Agent:
     def learn(self):
         self.brain.reply()
 
-    def get_action(self, state, step):
-        return self.brain.decide_action(state, step)
+    def get_action(self, state, episode):
+        return self.brain.decide_action(state, episode)
 
     def observe(self, state, action, state_next, reward):
         self.brain.add_memory(Transition(state, action, state_next, reward))
@@ -169,7 +169,7 @@ class Brain:
             print('start reply from next step')
 
     def decide_action(self, state, episode):
-        epsilon = 0.5 * (1 / (episode + 1))
+        epsilon = 0.5 * (1 / (episode + 1 + 0.001))
 
         if epsilon < random.uniform(0, 1):
             self.model.eval()
@@ -195,8 +195,8 @@ class Agent:
         self.brain.reply()
         self._update_target_model();
 
-    def get_action(self, state, step):
-        return self.brain.decide_action(state, step)
+    def get_action(self, state, episode):
+        return self.brain.decide_action(state, episode)
 
     def observe(self, state, action, state_next, reward):
         self.brain.add_memory(Transition(state, action, state_next, reward))
