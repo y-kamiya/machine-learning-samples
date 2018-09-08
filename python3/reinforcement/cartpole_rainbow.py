@@ -55,7 +55,6 @@ class Environment:
 
             self.agent.observe(state, action, state_next, reward)
             self.agent.learn()
-            self.agent.update_target_model();
 
             state = state_next
 

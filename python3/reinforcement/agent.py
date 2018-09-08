@@ -193,6 +193,7 @@ class Agent:
 
     def learn(self):
         self.brain.reply()
+        self._update_target_model();
 
     def get_action(self, state, step):
         return self.brain.decide_action(state, step)
@@ -200,7 +201,7 @@ class Agent:
     def observe(self, state, action, state_next, reward):
         self.brain.add_memory(Transition(state, action, state_next, reward))
 
-    def update_target_model(self):
+    def _update_target_model(self):
         self.steps_accumulated += 1
 
         if self.config.num_steps_to_update_target <= self.steps_accumulated:
