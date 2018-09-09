@@ -20,31 +20,6 @@ BATCH_SIZE = 32
 CAPACITY = 10000
 MEMORY_SIZE_TO_START_REPLY = 1000
 
-class Agent:
-    def __init__(self, config, num_states, num_actions):
-        self.config = config
-        self.num_states = num_states
-        self.num_actions = num_actions
-        self.steps_accumulated = 0
-        self.brain = Brain(config, num_states, num_actions)
-
-    def learn(self):
-        self.brain.reply()
-
-    def get_action(self, state, episode):
-        return self.brain.decide_action(state, episode)
-
-    def observe(self, state, action, state_next, reward):
-        self.brain.add_memory(Transition(state, action, state_next, reward))
-
-    def update_target_model(self):
-        self.steps_accumulated += 1
-
-        if self.config.num_steps_to_update_target <= self.steps_accumulated:
-            self.steps_accumulated = 0
-            self.brain.update_target_model()
-            return
-
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
