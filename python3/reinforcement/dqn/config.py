@@ -9,6 +9,9 @@ NUM_MULTI_STEP_REWARD_DEFAULT = 1
 DATA_PATH_DEFAULT = 'default.dat'
 
 class Config:
+    MODEL_TYPE_FC = 0
+    MODEL_TYPE_CONV2D = 1
+
     def __init__(self, argv):
         parser = argparse.ArgumentParser(add_help=True)
         parser.add_argument('-p', '--path', help='path to model data file')
@@ -38,3 +41,4 @@ class Config:
         self.num_epochs = args.epochs if args.epochs != None else NUM_EPOCHS_DEFAULT
         self.num_steps_to_update_target = args.steps_to_update_target if args.steps_to_update_target != None else NUM_STEPS_TO_UPDATE_TARGET_DEFAULT
 
+        self.model_type = self.MODEL_TYPE_FC

@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import numpy as np
 from collections import namedtuple 
+import copy
 import random
 import torch
 from torch import optim
@@ -84,12 +85,18 @@ class Brain:
         self.memory = PERMemory(CAPACITY) if config.use_per else ReplayMemory(CAPACITY)
         self.multi_step_transitions = []
 
-        self.model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
-        self.target_model = DuelingNetFC(num_states, num_actions).to(device=self.config.device)
+        self.model = self._create_model(config, num_states, num_actions)
+        self.target_model = copy.deepcopy(self.model)
         self.target_model.eval()
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
     
+    def _create_model(self, config, num_states, num_actions):
+        if config.model_type == Config.MODEL_TYPE_CONV2D:
+            return DuelingNetConv2d(num_states, num_actions).to(device=config.device)
+
+        return DuelingNetFC(num_states, num_actions).to(device=config.device)
+
     def _get_state_action_values(self, transitions):
         batch_size = len(transitions)
         batch = Transition(*zip(*transitions))
