@@ -10,7 +10,7 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 
-from model import DuelingNetFC
+from model import DuelingNetFC, DuelingNetConv2d
 from config import Config
 from sum_tree import SumTree
 

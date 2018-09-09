@@ -6,11 +6,11 @@ NUM_STEPS_DEFAULT = 3000
 NUM_EPOCHS_DEFAULT = 1
 NUM_STEPS_TO_UPDATE_TARGET_DEFAULT = 1
 NUM_MULTI_STEP_REWARD_DEFAULT = 1
-DATA_PATH_DEFAULT = 'default.dat'
 
 class Config:
     MODEL_TYPE_FC = 0
     MODEL_TYPE_CONV2D = 1
+    DATA_PATH_DEFAULT = 'default.dat'
 
     def __init__(self, argv):
         parser = argparse.ArgumentParser(add_help=True)
@@ -30,7 +30,7 @@ class Config:
         self.device = torch.device(device_name)
 
         data_path = args.path
-        self.data_path = data_path if data_path != None else DATA_PATH_DEFAULT
+        self.data_path = data_path if data_path != None else self.DATA_PATH_DEFAULT
 
         self.is_saved = not args.nosave
         self.is_render = args.render
