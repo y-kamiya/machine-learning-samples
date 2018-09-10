@@ -16,7 +16,7 @@ pip install -e .
 popd
 
 dir=$(dirname $0)
-cp $dir/scenario.json /usr/local/lib/python3.6/dist-packages/retro/data/SonicTheHedgehog-Genesis/
+cp $dir/scenario.json /usr/local/lib/python3.6/dist-packages/retro/data/stable/SonicTheHedgehog-Genesis/
 
 # you should rom.md on current directory in advance
-cp rom.md /usr/local/lib/python3.6/dist-packages/retro/data/SonicTheHedgehog-Genesis/
+cp rom.md /usr/local/lib/python3.6/dist-packages/retro/data/stable/SonicTheHedgehog-Genesis/
