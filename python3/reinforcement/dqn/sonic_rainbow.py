@@ -38,8 +38,7 @@ class Environment:
     def __init__(self, config):
         config.model_type = Config.MODEL_TYPE_CONV2D
 
-        device_name = config.device
-        self.device = torch.device(device_name)
+        self.device = config.device
         self.num_steps = config.num_steps
         self.num_episodes = config.num_episodes
 
@@ -48,15 +47,15 @@ class Environment:
         self.num_states = NUM_STATES
         self.num_actions = self.env.action_space.n
 
-        if config.data_path != Config.DATA_PATH_DEFAULT:
-            print('load data from {0}'.format(data_path))
-            self.get_model().load_state_dict(torch.load(data_path, map_location=device_name))
-        self.data_path = config.data_path
-
         self.is_saved = config.is_saved
         self.is_render = config.is_render
 
         self.agent = Agent(config, self.num_states, self.num_actions)
+
+        self.data_path = config.data_path
+        if self.data_path != Config.DATA_PATH_DEFAULT:
+            print('load data from {0}'.format(self.data_path))
+            self.get_model().load_state_dict(torch.load(self.data_path, map_location=config.device_name))
 
     def get_model(self):
         return self.agent.brain.model

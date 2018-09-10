@@ -26,8 +26,8 @@ class Config:
         parser.add_argument('--cpu', action='store_true', help='use cpu')
         args = parser.parse_args(argv)
 
-        device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
-        self.device = torch.device(device_name)
+        self.device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
+        self.device = torch.device(self.device_name)
 
         data_path = args.path
         self.data_path = data_path if data_path != None else self.DATA_PATH_DEFAULT
