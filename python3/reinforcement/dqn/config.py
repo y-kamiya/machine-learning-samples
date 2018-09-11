@@ -40,6 +40,9 @@ class Config:
 
         self.is_saved = not args.nosave
         self.is_render = args.render
+        if self.is_render:
+            self.is_saved = False
+
         self.use_per = args.use_per
         self.num_multi_step_reward = args.num_multi_step_reward if args.num_multi_step_reward != None else NUM_MULTI_STEP_REWARD_DEFAULT
         self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT

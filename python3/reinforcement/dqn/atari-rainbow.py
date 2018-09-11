@@ -28,8 +28,7 @@ class Environment:
 
         self.data_path = config.data_path
         if self.data_path != Config.DATA_PATH_DEFAULT:
-            print('load data from {0}'.format(self.data_path))
-            self.get_model().load_state_dict(torch.load(self.data_path, map_location=config.device_name))
+            self.agent.load_model()
 
     def prepro(self, observation):
         ret = np.zeros((4, 84, 84))
@@ -46,6 +45,9 @@ class Environment:
         state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
         for step in range(self.config.num_steps):
+            if self.config.is_render:
+                self.env.render()
+
             action = self.agent.get_action(state, episode)
 
             observation_next, reward, done, _ = self.env.step(action.item())
@@ -60,8 +62,9 @@ class Environment:
             total_reward += reward
             reward = torch.tensor([reward], dtype=torch.float32, device=self.config.device)
 
-            self.agent.observe(state, action, state_next, reward)
-            self.agent.learn()
+            if not self.config.is_render:
+                self.agent.observe(state, action, state_next, reward)
+                self.agent.learn()
 
             state = state_next
 

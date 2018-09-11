@@ -188,6 +188,10 @@ class Brain:
         if self.config.is_saved:
             self.save_model()
 
+    def load_model(self):
+        print('load data from {0}'.format(self.config.data_path))
+        self.model.load_state_dict(torch.load(self.config.data_path, map_location=self.config.device_name))
+
     def save_model(self):
         print('save model parameters to {0}'.format(self.config.data_path))
         torch.save(self.model.state_dict(), self.config.data_path)
@@ -209,6 +213,9 @@ class Agent:
 
     def observe(self, state, action, state_next, reward):
         self.brain.add_memory(Transition(state, action, state_next, reward))
+
+    def load_model(self):
+        self.brain.load_model()
 
     def save_model(self):
         self.brain.save_model()
