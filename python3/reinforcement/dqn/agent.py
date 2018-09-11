@@ -18,8 +18,7 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 
 GAMMA = 0.99
 BATCH_SIZE = 32
-CAPACITY = 10000
-MEMORY_SIZE_TO_START_REPLY = 1000
+CAPACITY = 100000
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -89,7 +88,7 @@ class Brain:
         self.target_model = copy.deepcopy(self.model)
         self.target_model.eval()
         print(self.model)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
     
     def _create_model(self, config, num_states, num_actions):
         if config.model_type == Config.MODEL_TYPE_CONV2D:
@@ -126,7 +125,7 @@ class Brain:
         return (values, expected_values)
 
     def reply(self):
-        if (len(self.memory) < MEMORY_SIZE_TO_START_REPLY):
+        if len(self.memory) < self.config.steps_learning_start:
             return
 
         indexes, transitions = self.memory.sample(BATCH_SIZE)
@@ -155,7 +154,7 @@ class Brain:
         td_error = abs(expected_values.item() - values.item())
         self.memory.push(td_error, transition)
 
-        if (len(self.memory) == MEMORY_SIZE_TO_START_REPLY):
+        if len(self.memory) == self.config.steps_learning_start:
             print('start reply from next step')
 
     def _get_multi_step_transition(self, transition):
@@ -186,6 +185,12 @@ class Brain:
 
     def update_target_model(self):
         self.target_model.load_state_dict(self.model.state_dict())
+        if self.config.is_saved:
+            self.save_model()
+
+    def save_model(self):
+        print('save model parameters to {0}'.format(self.config.data_path))
+        torch.save(self.model.state_dict(), self.config.data_path)
 
 class Agent:
     def __init__(self, config, num_states, num_actions):
@@ -204,6 +209,9 @@ class Agent:
 
     def observe(self, state, action, state_next, reward):
         self.brain.add_memory(Transition(state, action, state_next, reward))
+
+    def save_model(self):
+        self.brain.save_model()
 
     def _update_target_model(self):
         self.steps_accumulated += 1
