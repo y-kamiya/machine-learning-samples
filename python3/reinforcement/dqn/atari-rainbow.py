@@ -13,9 +13,6 @@ from config import Config
 from agent import Agent
 
 ENV = 'BreakoutNoFrameskip-v4'
-MAX_STEPS = 4500
-NUM_EPISODE = 500
-MEMORY_SIZE_TO_START_REPLY = 50000
 
 class Environment:
     def __init__(self, config):
@@ -48,7 +45,7 @@ class Environment:
         observation = self.prepro(self.env.reset())
         state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
-        for step in range(MAX_STEPS):
+        for step in range(self.config.num_steps):
             action = self.agent.get_action(state, episode)
 
             observation_next, reward, done, _ = self.env.step(action.item())
@@ -82,7 +79,7 @@ class Environment:
             if self.config.steps_learning_start < steps:
                 break
 
-        for episode in range(NUM_EPISODE):
+        for episode in range(self.config.num_episodes):
             _ = self.run_episode(episode)
 
         self.env.close()
