@@ -69,21 +69,24 @@ class DuelingNetConv2d(nn.Module):
         self.num_states = num_states
         self.num_actions = num_actions
 
-        self.conv1 = nn.Conv2d(num_states, 32, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
-        self.fc1 = nn.Linear(21 * 21 * 64, 256)
+        self.conv1 = nn.Conv2d(num_states, 16, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
+        self.fc1 = nn.Linear(9 * 9 * 32, 256)
+        # self.conv1 = nn.Conv2d(num_states, 32, kernel_size=5, padding=2)
+        # self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
+        # self.fc1 = nn.Linear(21 * 21 * 64, 256)
 
         self.fcV = nn.Linear(256, 1)
         self.fcA = nn.Linear(256, num_actions)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, kernel_size=2, stride=2)
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv2(x))
-        x = F.max_pool2d(x, kernel_size=2, stride=2)
-        x = x.view([-1, 21 * 21 * 64])
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view([-1, 9 * 9 * 32])
         x = self.fc1(x)
-        x = F.dropout(x, p=0.4, training=self.training)
+        # x = F.dropout(x, p=0.4, training=self.training)
 
         V = self.fcV(x)
         A = self.fcA(x)
