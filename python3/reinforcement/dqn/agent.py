@@ -18,7 +18,6 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 
 GAMMA = 0.99
 BATCH_SIZE = 32
-CAPACITY = 100000
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -81,7 +80,8 @@ class Brain:
         self.num_states = num_states
         self.num_actions = num_actions
 
-        self.memory = PERMemory(CAPACITY) if config.use_per else ReplayMemory(CAPACITY)
+        capacity = config.reply_memory_capacity
+        self.memory = PERMemory(capacity) if config.use_per else ReplayMemory(capacity)
         self.multi_step_transitions = []
 
         self.model = self._create_model(config, num_states, num_actions)
