@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os.path
 import numpy as np
 from collections import namedtuple 
 import copy
@@ -193,8 +194,12 @@ class Brain:
         self.model.load_state_dict(torch.load(self.config.data_path, map_location=self.config.device_name))
 
     def save_model(self):
-        print('save model parameters to {0}'.format(self.config.data_path))
-        torch.save(self.model.state_dict(), self.config.data_path)
+        path = self.config.data_path
+        if os.path.isdir('data'):
+            path = 'data/{0}'.format(self.config.data_path)
+
+        print('save model parameters to {0}'.format(path))
+        torch.save(self.model.state_dict(), path)
 
 class Agent:
     def __init__(self, config, num_states, num_actions):
