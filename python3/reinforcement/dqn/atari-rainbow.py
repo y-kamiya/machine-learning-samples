@@ -46,11 +46,13 @@ class Environment:
 
         for step in range(self.config.num_steps):
             if self.config.is_render:
+                time.sleep(0.064)
                 self.env.render()
 
             action = self.agent.get_action(state, episode)
 
             observation_next, reward, done, _ = self.env.step(action.item())
+            print(step, reward)
 
             if done:
                 state_next = None
@@ -76,11 +78,12 @@ class Environment:
         return MAX_STEPS
 
     def run(self):
-        steps = 0
-        while True:
-            steps += self.run_episode(-1)
-            if self.config.steps_learning_start < steps:
-                break
+        if not self.config.is_render:
+            steps = 0
+            while True:
+                steps += self.run_episode(-1)
+                if self.config.steps_learning_start <= steps:
+                    break
 
         for episode in range(self.config.num_episodes):
             _ = self.run_episode(episode)
