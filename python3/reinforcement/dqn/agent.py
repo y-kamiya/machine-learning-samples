@@ -107,8 +107,6 @@ class Brain:
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
         
-        self.model.eval()
-
         next_state_values = torch.zeros(batch_size).to(self.config.device, dtype=torch.float32)
 
         next_states = [s for s in batch.next_state if s is not None]
@@ -129,10 +127,10 @@ class Brain:
         if len(self.memory) < self.config.steps_learning_start:
             return
 
+        self.model.train()
+
         indexes, transitions = self.memory.sample(BATCH_SIZE)
         values, expected_values = self._get_state_action_values(transitions)
-
-        self.model.train()
 
         loss = F.smooth_l1_loss(values, expected_values)
         self.optimizer.zero_grad()
@@ -150,6 +148,8 @@ class Brain:
 
         if transition == None:
             return
+
+        self.model.eval()
 
         values, expected_values = self._get_state_action_values([transition])
         td_error = abs(expected_values.item() - values.item())
