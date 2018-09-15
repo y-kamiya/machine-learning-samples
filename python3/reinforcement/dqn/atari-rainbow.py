@@ -52,7 +52,6 @@ class Environment:
             action = self.agent.get_action(state, episode)
 
             observation_next, reward, done, _ = self.env.step(action.item())
-            print(step, reward)
 
             if done:
                 state_next = None
