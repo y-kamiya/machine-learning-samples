@@ -92,10 +92,11 @@ class Brain:
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
     
     def _create_model(self, config, num_states, num_actions):
+        use_noisy = self.config.use_noisy_network
         if config.model_type == Config.MODEL_TYPE_CONV2D:
-            return DuelingNetConv2d(num_states, num_actions).to(device=config.device)
+            return DuelingNetConv2d(num_states, num_actions, use_noisy).to(device=config.device)
 
-        return DuelingNetFC(num_states, num_actions).to(device=config.device)
+        return DuelingNetFC(num_states, num_actions, use_noisy).to(device=config.device)
 
     def _get_state_action_values(self, transitions):
         batch_size = len(transitions)
@@ -175,7 +176,7 @@ class Brain:
     def decide_action(self, state, episode):
         epsilon = 0.5 * (1 / (episode + 1 + 0.001))
 
-        if epsilon < random.uniform(0, 1):
+        if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             action = self.model(state).data.max(1)[1].view(1, 1)
         else:

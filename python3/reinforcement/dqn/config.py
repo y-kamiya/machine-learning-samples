@@ -26,6 +26,7 @@ class Config:
         parser.add_argument('--steps_learning_start', type=int, help='start to learn after elapsed this step')
         parser.add_argument('--render', action='store_true', help='render game')
         parser.add_argument('--use_per', action='store_true', help='use prioritized experience reply')
+        parser.add_argument('--use_noisy_network', action='store_true', help='use noisy network')
         parser.add_argument('--num_multi_step_reward', type=int, help='multi step reward count')
         parser.add_argument('--cpu', action='store_true', help='use cpu')
         parser.add_argument('--learning_rate', type=float, help='learning rate for Adam')
@@ -44,6 +45,7 @@ class Config:
             self.is_saved = False
 
         self.use_per = args.use_per
+        self.use_noisy_network = args.use_noisy_network
         self.num_multi_step_reward = args.num_multi_step_reward if args.num_multi_step_reward != None else NUM_MULTI_STEP_REWARD_DEFAULT
         self.num_steps = args.steps if args.steps != None else NUM_STEPS_DEFAULT
         self.num_episodes = args.episodes if args.episodes != None else NUM_EPISODES_DEFAULT
