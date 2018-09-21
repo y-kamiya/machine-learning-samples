@@ -124,8 +124,8 @@ class FactorizedNoisy(nn.Module):
         self.sigma_b.data.fill_(initial_sigma)
 
     def forward(self, x):
-        rand_in = self._f(torch.randn(1, self.in_features))
-        rand_out = self._f(torch.randn(self.out_features, 1))
+        rand_in = self._f(torch.randn(1, self.in_features, device=self.u_w.device))
+        rand_out = self._f(torch.randn(self.out_features, 1, device=self.u_w.device))
         epsilon_w = torch.matmul(rand_out, rand_in)
         epsilon_b = rand_out.squeeze()
 
