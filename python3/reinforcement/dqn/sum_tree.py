@@ -1,4 +1,5 @@
 # copy from https://github.com/jaara/AI-blog/blob/5aa9f0b/SumTree.py
+# and add some functions
 import numpy
 
 class SumTree:
@@ -8,6 +9,7 @@ class SumTree:
         self.capacity = capacity
         self.tree = numpy.zeros( 2*capacity - 1 )
         self.data = numpy.zeros( capacity, dtype=object )
+        self.index_leaf_start = capacity - 1
 
     def _propagate(self, idx, change):
         parent = (idx - 1) // 2
@@ -32,8 +34,11 @@ class SumTree:
     def total(self):
         return self.tree[0]
 
+    def max(self):
+        return self.tree[self.index_leaf_start:].max()
+
     def add(self, p, data):
-        idx = self.write + self.capacity - 1
+        idx = self.write + self.index_leaf_start
 
         self.data[self.write] = data
         self.update(idx, p)

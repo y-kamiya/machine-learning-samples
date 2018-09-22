@@ -26,7 +26,7 @@ class ReplayMemory:
         self.memory = []
         self.index = 0
 
-    def push(self, _, transition):
+    def push(self, transition):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
 
@@ -53,9 +53,13 @@ class PERMemory:
     def _getPriority(self, td_error):
         return (td_error + self.epsilon) ** self.alpha
 
-    def push(self, td_error, transition):
+    def push(self, transition):
         self.size += 1
-        priority = self._getPriority(td_error)
+
+        priority = self.tree.max()
+        if priority <= 0:
+            priority = 1
+
         self.tree.add(priority, transition)
 
     def sample(self, size):
@@ -152,11 +156,7 @@ class Brain:
         if transition == None:
             return
 
-        self.model.eval()
-
-        values, expected_values = self._get_state_action_values([transition])
-        td_error = abs(expected_values.item() - values.item())
-        self.memory.push(td_error, transition)
+        self.memory.push(transition)
 
         if len(self.memory) == self.config.steps_learning_start:
             print('start reply from next step')
