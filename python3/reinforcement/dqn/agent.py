@@ -117,16 +117,16 @@ class Brain:
 
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.uint8, device=self.config.device)
 
-        state_batch = torch.cat(batch.state)
+        state_batch = torch.cat(batch.state).to(torch.float32)
         action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        reward_batch = torch.cat(batch.reward).to(torch.float32)
         
         next_state_values = torch.zeros(batch_size).to(self.config.device, dtype=torch.float32)
 
         next_states = [s for s in batch.next_state if s is not None]
         if len(next_states) != 0:
             with torch.no_grad():
-                non_final_next_state = torch.cat(next_states)
+                non_final_next_state = torch.cat(next_states).to(torch.float32)
                 best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
                 next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
 
@@ -197,7 +197,7 @@ class Brain:
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             with torch.no_grad():
-                action = self.model(state).max(1)[1].view(1, 1)
+                action = self.model(state.to(torch.float32)).max(1)[1].view(1, 1)
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)

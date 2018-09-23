@@ -42,7 +42,7 @@ class Environment:
         start_time = time.time()
         total_reward = 0
         observation = self.prepro(self.env.reset())
-        state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
+        state = torch.from_numpy(observation).to(self.config.device, dtype=torch.uint8).unsqueeze(0)
 
         for step in range(self.config.num_steps):
             if self.config.is_render:
@@ -58,10 +58,10 @@ class Environment:
                 self.total_step = np.hstack((self.total_step[1:], step + 1))
             else:
                 state_next = self.prepro(observation_next)
-                state_next = torch.from_numpy(state_next).to(self.config.device, dtype=torch.float32).unsqueeze(0)
+                state_next = torch.from_numpy(state_next).to(self.config.device, dtype=torch.uint8).unsqueeze(0)
 
             total_reward += reward
-            reward = torch.tensor([reward], dtype=torch.float32, device=self.config.device)
+            reward = torch.tensor([reward], dtype=torch.uint8, device=self.config.device)
 
             if not self.config.is_render:
                 self.agent.observe(state, action, state_next, reward)
