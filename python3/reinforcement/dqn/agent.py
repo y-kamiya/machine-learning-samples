@@ -34,7 +34,7 @@ class ReplayMemory:
         self.index = (self.index + 1) % self.capacity
 
     def sample(self, size):
-        return (None, random.sample(self.memory, size))
+        return (None, random.sample(self.memory, size), None)
 
     def update(self, idx, td_error):
         pass
@@ -45,9 +45,12 @@ class ReplayMemory:
 class PERMemory:
     epsilon = 0.0001
     alpha = 0.6
+    beta = 0.4
+    STEPS_TO_REACH_BETA_MAX = 1000000
     size = 0
 
     def __init__(self, capacity):
+        self.capacity = capacity
         self.tree = SumTree(capacity)
 
     def _getPriority(self, td_error):
@@ -65,12 +68,18 @@ class PERMemory:
     def sample(self, size):
         list = []
         indexes = []
-        for rand in np.random.uniform(0, self.tree.total(), size):
-            (idx, _, data) = self.tree.get(rand)
+        weights = np.empty(size, dtype='float32')
+        total = self.tree.total()
+        for i, rand in enumerate(np.random.uniform(0, total, size)):
+            (idx, priority, data) = self.tree.get(rand)
             list.append(data)
             indexes.append(idx)
+            weights[i] = (self.capacity * priority / total) ** (-self.beta)
 
-        return (indexes, list)
+        beta = self.beta + 1 / self.STEPS_TO_REACH_BETA_MAX
+        self.beta = beta if beta < 1 else 1.0
+
+        return (indexes, list, weights / weights.max())
 
     def update(self, idx, td_error):
         priority = self._getPriority(td_error)
@@ -130,16 +139,23 @@ class Brain:
 
         return (values, expected_values)
 
+    def loss(self, input, target, weights):
+        if self.config.use_IS:
+            loss = torch.abs(target - input) * torch.from_numpy(weights).to(device=self.config.device)
+            return loss.mean()
+
+        return F.smooth_l1_loss(input, target)
+
     def reply(self):
         if len(self.memory) < self.config.steps_learning_start:
             return
 
         self.model.train()
 
-        indexes, transitions = self.memory.sample(BATCH_SIZE)
+        indexes, transitions, weights = self.memory.sample(BATCH_SIZE)
         values, expected_values = self._get_state_action_values(transitions)
 
-        loss = F.smooth_l1_loss(values, expected_values)
+        loss = self.loss(values, expected_values, weights)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
