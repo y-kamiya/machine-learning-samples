@@ -94,7 +94,7 @@ class Brain:
         self.num_states = num_states
         self.num_actions = num_actions
 
-        capacity = config.reply_memory_capacity
+        capacity = config.replay_memory_capacity
         self.memory = PERMemory(capacity) if config.use_per else ReplayMemory(capacity)
         self.multi_step_transitions = []
 
@@ -146,7 +146,7 @@ class Brain:
 
         return F.smooth_l1_loss(input, target)
 
-    def reply(self):
+    def replay(self):
         if len(self.memory) < self.config.steps_learning_start:
             return
 
@@ -175,7 +175,7 @@ class Brain:
         self.memory.push(transition)
 
         if len(self.memory) == self.config.steps_learning_start:
-            print('start reply from next step')
+            print('start replay from next step')
 
     def _get_multi_step_transition(self, transition):
         self.multi_step_transitions.append(transition)
@@ -230,7 +230,7 @@ class Agent:
         self.brain = Brain(config, num_states, num_actions)
 
     def learn(self):
-        self.brain.reply()
+        self.brain.replay()
         self._update_target_model();
 
     def get_action(self, state, episode):

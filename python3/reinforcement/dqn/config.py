@@ -25,13 +25,13 @@ class Config:
         parser.add_argument('--steps_to_update_target', type=int, help='count to update target model')
         parser.add_argument('--steps_learning_start', type=int, help='start to learn after elapsed this step')
         parser.add_argument('--render', action='store_true', help='render game')
-        parser.add_argument('--use_per', action='store_true', help='use prioritized experience reply')
+        parser.add_argument('--use_per', action='store_true', help='use prioritized experience replay')
         parser.add_argument('--use_IS', action='store_true', help='use importance sampling with annealing')
         parser.add_argument('--use_noisy_network', action='store_true', help='use noisy network')
         parser.add_argument('--num_multi_step_reward', type=int, help='multi step reward count')
         parser.add_argument('--cpu', action='store_true', help='use cpu')
         parser.add_argument('--learning_rate', type=float, help='learning rate for Adam')
-        parser.add_argument('--reply_memory_capacity', type=int, help='capacity of reply memory')
+        parser.add_argument('--replay_memory_capacity', type=int, help='capacity of replay memory')
         args = parser.parse_args(argv)
 
         self.device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
@@ -54,7 +54,7 @@ class Config:
         self.num_epochs = args.epochs if args.epochs != None else NUM_EPOCHS_DEFAULT
         self.num_steps_to_update_target = args.steps_to_update_target if args.steps_to_update_target != None else NUM_STEPS_TO_UPDATE_TARGET_DEFAULT
         self.steps_learning_start = args.steps_learning_start if args.steps_learning_start != None else STEPS_LEARNING_START_DEFAULT
-        self.reply_memory_capacity = args.reply_memory_capacity if args.reply_memory_capacity != None else REPLY_MEMORY_CAPACITY_DEFAULT
+        self.replay_memory_capacity = args.replay_memory_capacity if args.replay_memory_capacity != None else REPLY_MEMORY_CAPACITY_DEFAULT
         self.learning_rate = args.learning_rate if args.learning_rate != None else LEARNING_RATE_DEFAULT
 
         self.model_type = self.MODEL_TYPE_FC
