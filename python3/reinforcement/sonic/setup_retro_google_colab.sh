@@ -7,8 +7,8 @@ pip install torchvision
 # intall gym-retro
 pip install gym-retro
 
-apt-get update
-apt-get install cmake libopenmpi-dev python3-dev zlib1g-dev
+apt-get update -y
+apt-get install -y --allow-unauthenticated cmake libopenmpi-dev python3-dev zlib1g-dev
 
 git clone https://github.com/openai/baselines.git
 pushd baselines
