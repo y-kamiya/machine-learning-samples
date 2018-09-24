@@ -56,7 +56,7 @@ class Environment:
                 state_next = torch.from_numpy(observation_next).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
             self.agent.observe(state, action, state_next, reward)
-            self.agent.learn()
+            self.agent.learn(episode)
 
             state = state_next
 

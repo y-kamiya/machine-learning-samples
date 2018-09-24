@@ -33,7 +33,7 @@ class ReplayMemory:
         self.memory[self.index] = transition
         self.index = (self.index + 1) % self.capacity
 
-    def sample(self, size):
+    def sample(self, size, _):
         return (None, random.sample(self.memory, size), None)
 
     def update(self, idx, td_error):
@@ -43,18 +43,18 @@ class ReplayMemory:
         return len(self.memory)
 
 class PERMemory:
-    epsilon = 0.0001
-    alpha = 0.6
-    beta = 0.4
-    STEPS_TO_REACH_BETA_MAX = 1000000
+    EPSILON = 0.0001
+    ALPHA = 0.6
+    BETA = 0.4
     size = 0
 
-    def __init__(self, capacity):
+    def __init__(self, config, capacity):
+        self.config = config
         self.capacity = capacity
         self.tree = SumTree(capacity)
 
     def _getPriority(self, td_error):
-        return (td_error + self.epsilon) ** self.alpha
+        return (td_error + self.EPSILON) ** self.ALPHA
 
     def push(self, transition):
         self.size += 1
@@ -65,19 +65,18 @@ class PERMemory:
 
         self.tree.add(priority, transition)
 
-    def sample(self, size):
+    def sample(self, size, episode):
         list = []
         indexes = []
         weights = np.empty(size, dtype='float32')
         total = self.tree.total()
+        beta = self.BETA + (1 - self.BETA) * episode / self.config.num_episodes
+
         for i, rand in enumerate(np.random.uniform(0, total, size)):
             (idx, priority, data) = self.tree.get(rand)
             list.append(data)
             indexes.append(idx)
-            weights[i] = (self.capacity * priority / total) ** (-self.beta)
-
-        beta = self.beta + 1 / self.STEPS_TO_REACH_BETA_MAX
-        self.beta = beta if beta < 1 else 1.0
+            weights[i] = (self.capacity * priority / total) ** (-beta)
 
         return (indexes, list, weights / weights.max())
 
@@ -95,7 +94,7 @@ class Brain:
         self.num_actions = num_actions
 
         capacity = config.replay_memory_capacity
-        self.memory = PERMemory(capacity) if config.use_per else ReplayMemory(capacity)
+        self.memory = PERMemory(config, capacity) if config.use_per else ReplayMemory(capacity)
         self.multi_step_transitions = []
 
         self.model = self._create_model(config, num_states, num_actions)
@@ -146,13 +145,13 @@ class Brain:
 
         return F.smooth_l1_loss(input, target)
 
-    def replay(self):
+    def replay(self, episode):
         if len(self.memory) < self.config.steps_learning_start:
             return
 
         self.model.train()
 
-        indexes, transitions, weights = self.memory.sample(BATCH_SIZE)
+        indexes, transitions, weights = self.memory.sample(BATCH_SIZE, episode)
         values, expected_values = self._get_state_action_values(transitions)
 
         loss = self.loss(values, expected_values, weights)
@@ -229,8 +228,8 @@ class Agent:
         self.steps_accumulated = 0
         self.brain = Brain(config, num_states, num_actions)
 
-    def learn(self):
-        self.brain.replay()
+    def learn(self, episode):
+        self.brain.replay(episode)
         self._update_target_model();
 
     def get_action(self, state, episode):

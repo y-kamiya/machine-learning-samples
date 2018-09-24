@@ -65,7 +65,7 @@ class Environment:
 
             if not self.config.is_render:
                 self.agent.observe(state, action, state_next, reward)
-                self.agent.learn()
+                self.agent.learn(episode)
 
             state = state_next
 
