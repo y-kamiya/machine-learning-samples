@@ -70,6 +70,7 @@ class PERMemory:
         indexes = []
         weights = np.empty(size, dtype='float32')
         total = self.tree.total()
+        episode = 0
         beta = self.BETA + (1 - self.BETA) * episode / self.config.num_episodes
 
         for i, rand in enumerate(np.random.uniform(0, total, size)):
