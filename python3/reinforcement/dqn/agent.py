@@ -71,6 +71,7 @@ class PERMemory:
         weights = np.empty(size, dtype='float32')
         total = self.tree.total()
         beta = self.BETA + (1 - self.BETA) * episode / self.config.num_episodes
+        beta = min(1.0, beta)
 
         for i, rand in enumerate(np.random.uniform(0, total, size)):
             (idx, priority, data) = self.tree.get(rand)
