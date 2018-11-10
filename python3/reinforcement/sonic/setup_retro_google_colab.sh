@@ -6,6 +6,7 @@ pip install torchvision
 
 # intall gym-retro
 pip install gym-retro
+pip install gym[atari]
 
 apt-get update -y
 apt-get install -y --allow-unauthenticated cmake libopenmpi-dev python3-dev zlib1g-dev
