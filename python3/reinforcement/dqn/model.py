@@ -43,8 +43,8 @@ class DuelingNetFC(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
 
-        V = self.fcV2(self.fcV1(x))
-        A = self.fcA2(self.fcA1(x))
+        V = self.fcV2(F.relu(self.fcV1(x)))
+        A = self.fcA2(F.relu(self.fcA1(x)))
 
         averageA = A.mean(1).unsqueeze(1)
         return V.expand(-1, self.num_actions) + (A - averageA.expand(-1, self.num_actions))
@@ -66,7 +66,7 @@ class NetConv2d(nn.Module):
         x = F.relu(self.conv2(x))
         x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = x.view([-1, 21 * 21 * 64])
-        x = self.fc1(x)
+        x = F.relu(self.fc1(x))
         x = F.dropout(x, p=0.4, training=self.training)
         return self.fc2(x)
 
@@ -94,8 +94,8 @@ class DuelingNetConv2d(nn.Module):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view([-1, 2592])
-        V = self.fcV2(self.fcV1(x))
-        A = self.fcA2(self.fcA1(x))
+        V = self.fcV2(F.relu(self.fcV1(x)))
+        A = self.fcA2(F.relu(self.fcA1(x)))
 
         averageA = A.mean(1).unsqueeze(1)
         return V.expand(-1, self.num_actions) + (A - averageA.expand(-1, self.num_actions))
