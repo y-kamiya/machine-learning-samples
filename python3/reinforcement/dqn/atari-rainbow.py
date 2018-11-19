@@ -7,7 +7,8 @@ import time
 import gym
 import numpy as np
 import torch
-from baselines.common.atari_wrappers import make_atari, wrap_deepmind
+from utils import make_atari, wrap_deepmind
+# from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 
 from config import Config
 from agent import Agent
