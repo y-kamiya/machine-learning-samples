@@ -18,7 +18,6 @@ from sum_tree import SumTree
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
 GAMMA = 0.99
-BATCH_SIZE = 32
 
 class ReplayMemory:
     def __init__(self, capacity):
@@ -152,7 +151,7 @@ class Brain:
 
         self.model.train()
 
-        indexes, transitions, weights = self.memory.sample(BATCH_SIZE, episode)
+        indexes, transitions, weights = self.memory.sample(self.config.batch_size, episode)
         values, expected_values = self._get_state_action_values(transitions)
 
         loss = self.loss(values, expected_values, weights)

@@ -9,6 +9,7 @@ NUM_MULTI_STEP_REWARD_DEFAULT = 1
 LEARNING_RATE_DEFAULT = 0.0001
 STEPS_LEARNING_START_DEFAULT = 1000
 REPLY_MEMORY_CAPACITY_DEFAULT = 10000
+BATCH_SIZE_DEFAULT = 32
 
 class Config:
     MODEL_TYPE_FC = 0
@@ -32,6 +33,7 @@ class Config:
         parser.add_argument('--cpu', action='store_true', help='use cpu')
         parser.add_argument('--learning_rate', type=float, help='learning rate for Adam')
         parser.add_argument('--replay_memory_capacity', type=int, help='capacity of replay memory')
+        parser.add_argument('--batch_size', type=int, help='size of mini batch')
         args = parser.parse_args(argv)
 
         self.device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
@@ -56,5 +58,6 @@ class Config:
         self.steps_learning_start = args.steps_learning_start if args.steps_learning_start != None else STEPS_LEARNING_START_DEFAULT
         self.replay_memory_capacity = args.replay_memory_capacity if args.replay_memory_capacity != None else REPLY_MEMORY_CAPACITY_DEFAULT
         self.learning_rate = args.learning_rate if args.learning_rate != None else LEARNING_RATE_DEFAULT
+        self.batch_size = args.batch_size if args.batch_size != None else BATCH_SIZE_DEFAULT
 
         self.model_type = self.MODEL_TYPE_FC
