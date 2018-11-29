@@ -80,14 +80,14 @@ class DuelingNetConv2d(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
         self.conv3 = nn.Conv2d(32, 32, kernel_size=3)
         if is_noisy:
-            # 7 * 7 * 64 = 3136
-            self.fcV1 = FactorizedNoisy(3136, 256)
-            self.fcA1 = FactorizedNoisy(3136, 256)
+            # 7 * 7 * 64 = 1568
+            self.fcV1 = FactorizedNoisy(1568, 256)
+            self.fcA1 = FactorizedNoisy(1568, 256)
             self.fcV2 = FactorizedNoisy(256, 1)
             self.fcA2 = FactorizedNoisy(256, num_actions)
         else:
-            self.fcV1 = nn.Linear(3136, 256)
-            self.fcA1 = nn.Linear(3136, 256)
+            self.fcV1 = nn.Linear(1568, 256)
+            self.fcA1 = nn.Linear(1568, 256)
             self.fcV2 = nn.Linear(256, 1)
             self.fcA2 = nn.Linear(256, num_actions)
 
@@ -95,7 +95,7 @@ class DuelingNetConv2d(nn.Module):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
-        x = x.view([-1, 3136])
+        x = x.view([-1, 1568])
         V = self.fcV2(F.relu(self.fcV1(x)))
         A = self.fcA2(F.relu(self.fcA1(x)))
 
