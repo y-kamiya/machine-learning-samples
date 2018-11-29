@@ -30,21 +30,19 @@ class DuelingNetFC(nn.Module):
 
         self.fc1 = nn.Linear(self.num_states, 32)
         if is_noisy:
-            self.fcV1 = FactorizedNoisy(32, 32)
-            self.fcA1 = FactorizedNoisy(32, 32)
-            self.fcV2 = FactorizedNoisy(32, 1)
-            self.fcA2 = FactorizedNoisy(32, self.num_actions)
+            self.fc2 = FactorizedNoisy(32, 32)
         else:
-            self.fcV1 = nn.Linear(32, 32)
-            self.fcA1 = nn.Linear(32, 32)
-            self.fcV2 = nn.Linear(32, 1)
-            self.fcA2 = nn.Linear(32, self.num_actions)
+            self.fc2 = nn.Linear(32, 32)
+
+        self.fcV = nn.Linear(32, 1)
+        self.fcA = nn.Linear(32, self.num_actions)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
 
-        V = self.fcV2(self.fcV1(x))
-        A = self.fcA2(self.fcA1(x))
+        V = self.fcV(x)
+        A = self.fcA(x)
 
         averageA = A.mean(1).unsqueeze(1)
         return V.expand(-1, self.num_actions) + (A - averageA.expand(-1, self.num_actions))
@@ -79,23 +77,27 @@ class DuelingNetConv2d(nn.Module):
         self.conv1 = nn.Conv2d(num_states, 16, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
         if is_noisy:
-            # 9 * 9 * 32 = 2592
-            self.fcV1 = FactorizedNoisy(2592, 256)
-            self.fcA1 = FactorizedNoisy(2592, 256)
-            self.fcV2 = FactorizedNoisy(256, 1)
-            self.fcA2 = FactorizedNoisy(256, num_actions)
+            self.fc1 = FactorizedNoisy(9 * 9 * 32, 256)
         else:
-            self.fcV1 = nn.Linear(2592, 256)
-            self.fcA1 = nn.Linear(2592, 256)
-            self.fcV2 = nn.Linear(256, 1)
-            self.fcA2 = nn.Linear(256, num_actions)
+            self.fc1 = nn.Linear(9 * 9 * 32, 256)
+        # self.conv1 = nn.Conv2d(num_states, 32, kernel_size=5, padding=2)
+        # self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
+        # self.fc1 = nn.Linear(21 * 21 * 64, 256)
+
+        self.fcV = nn.Linear(256, 1)
+        self.fcA = nn.Linear(256, num_actions)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
         x = F.relu(self.conv2(x))
-        x = x.view([-1, 2592])
-        V = self.fcV2(self.fcV1(x))
-        A = self.fcA2(self.fcA1(x))
+        # x = F.max_pool2d(x, kernel_size=2, stride=2)
+        x = x.view([-1, 9 * 9 * 32])
+        x = self.fc1(x)
+        # x = F.dropout(x, p=0.4, training=self.training)
+
+        V = self.fcV(x)
+        A = self.fcA(x)
 
         averageA = A.mean(1).unsqueeze(1)
         return V.expand(-1, self.num_actions) + (A - averageA.expand(-1, self.num_actions))
