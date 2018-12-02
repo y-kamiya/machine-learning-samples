@@ -17,6 +17,9 @@ class NetFC(nn.Module):
         self.fc2 = nn.Linear(32, 32)
         self.fc3 = nn.Linear(32, self.num_actions)
 
+    def reset_noise(self):
+        pass
+
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
@@ -40,6 +43,12 @@ class DuelingNetFC(nn.Module):
             self.fcV2 = nn.Linear(32, 1)
             self.fcA2 = nn.Linear(32, self.num_actions)
 
+    def reset_noise(self):
+        self.fcV1.reset_noise()
+        self.fcA1.reset_noise()
+        self.fcV2.reset_noise()
+        self.fcA2.reset_noise()
+
     def forward(self, x):
         x = F.relu(self.fc1(x))
 
@@ -59,6 +68,9 @@ class NetConv2d(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=2)
         self.fc1 = nn.Linear(21 * 21 * 64, 256)
         self.fc2 = nn.Linear(256, num_actions)
+
+    def reset_noise(self):
+        pass
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -90,6 +102,12 @@ class DuelingNetConv2d(nn.Module):
             self.fcV2 = nn.Linear(256, 1)
             self.fcA2 = nn.Linear(256, num_actions)
 
+    def reset_noise(self):
+        self.fcV1.reset_noise()
+        self.fcA1.reset_noise()
+        self.fcV2.reset_noise()
+        self.fcA2.reset_noise()
+
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
@@ -110,9 +128,10 @@ class FactorizedNoisy(nn.Module):
         self.sigma_w  = nn.Parameter(torch.Tensor(out_features, in_features))
         self.u_b = nn.Parameter(torch.Tensor(out_features))
         self.sigma_b = nn.Parameter(torch.Tensor(out_features))
-        self.reset_parameters()
+        self._reset_parameters()
+        self.reset_noise()
 
-    def reset_parameters(self):
+    def _reset_parameters(self):
         stdv = 1. / math.sqrt(self.u_w.size(1))
         self.u_w.data.uniform_(-stdv, stdv)
         self.u_b.data.uniform_(-stdv, stdv)
@@ -121,14 +140,15 @@ class FactorizedNoisy(nn.Module):
         self.sigma_w.data.fill_(initial_sigma)
         self.sigma_b.data.fill_(initial_sigma)
 
-    def forward(self, x):
+    def reset_noise(self):
         rand_in = self._f(torch.randn(1, self.in_features, device=self.u_w.device))
         rand_out = self._f(torch.randn(self.out_features, 1, device=self.u_w.device))
-        epsilon_w = torch.matmul(rand_out, rand_in)
-        epsilon_b = rand_out.squeeze()
+        self.epsilon_w = torch.matmul(rand_out, rand_in)
+        self.epsilon_b = rand_out.squeeze()
 
-        w = self.u_w + self.sigma_w * epsilon_w
-        b = self.u_b + self.sigma_b * epsilon_b
+    def forward(self, x):
+        w = self.u_w + self.sigma_w * self.epsilon_w
+        b = self.u_b + self.sigma_b * self.epsilon_b
         return F.linear(x, w, b)
 
     def _f(self, x):
