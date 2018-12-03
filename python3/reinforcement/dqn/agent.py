@@ -126,13 +126,16 @@ class Brain:
         if len(next_states) != 0:
             with torch.no_grad():
                 non_final_next_state = torch.cat(next_states).to(torch.float32)
+                self.model.reset_noise()
                 best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
+                self.target_model.reset_noise()
                 next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
 
         gamma = GAMMA ** self.config.num_multi_step_reward
         expected_values = reward_batch + gamma * next_state_values
 
         with torch.set_grad_enabled(self.model.training):
+            self.model.reset_noise()
             values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
             values.to(self.config.device, dtype=torch.float32)
 
@@ -196,6 +199,7 @@ class Brain:
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             with torch.no_grad():
+                self.model.reset_noise()
                 action = self.model(state.to(torch.float32)).max(1)[1].view(1, 1)
         else:
             rand = random.randrange(self.num_actions)
