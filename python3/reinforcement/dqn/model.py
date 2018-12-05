@@ -30,6 +30,7 @@ class DuelingNetFC(nn.Module):
         super(DuelingNetFC, self).__init__()
         self.num_states = num_states
         self.num_actions = num_actions
+        self.is_noisy = is_noisy
 
         self.fc1 = nn.Linear(self.num_states, 32)
         if is_noisy:
@@ -44,6 +45,9 @@ class DuelingNetFC(nn.Module):
             self.fcA2 = nn.Linear(32, self.num_actions)
 
     def reset_noise(self):
+        if not self.is_noisy:
+            return
+
         self.fcV1.reset_noise()
         self.fcA1.reset_noise()
         self.fcV2.reset_noise()
@@ -87,6 +91,7 @@ class DuelingNetConv2d(nn.Module):
         super(DuelingNetConv2d, self).__init__()
         self.num_states = num_states
         self.num_actions = num_actions
+        self.is_noisy = is_noisy
 
         self.conv1 = nn.Conv2d(num_states, 16, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
@@ -103,6 +108,9 @@ class DuelingNetConv2d(nn.Module):
             self.fcA2 = nn.Linear(256, num_actions)
 
     def reset_noise(self):
+        if not self.is_noisy:
+            return
+
         self.fcV1.reset_noise()
         self.fcA1.reset_noise()
         self.fcV2.reset_noise()
