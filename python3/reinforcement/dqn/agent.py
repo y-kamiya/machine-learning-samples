@@ -108,7 +108,7 @@ class Brain:
             self.support = torch.Tensor([self.Vmin + i * self.delta_z for i in range(num_atoms)])
 
         print(self.model)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate, eps=self.config.adam_epsilon)
     
     def _create_model(self, config, num_states, num_actions):
         use_noisy = self.config.use_noisy_network

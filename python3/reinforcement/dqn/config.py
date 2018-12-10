@@ -38,6 +38,7 @@ class Config:
         parser.add_argument('--learning_rate', type=float, help='learning rate for Adam')
         parser.add_argument('--replay_memory_capacity', type=int, help='capacity of replay memory')
         parser.add_argument('--batch_size', type=int, help='size of mini batch')
+        parser.add_argument('--adam_epsilon', type=float, help='size of mini batch')
         args = parser.parse_args(argv)
 
         self.device_name = 'cuda' if torch.cuda.is_available() and not args.cpu else 'cpu'
@@ -66,6 +67,7 @@ class Config:
         self.replay_memory_capacity = args.replay_memory_capacity if args.replay_memory_capacity != None else REPLY_MEMORY_CAPACITY_DEFAULT
         self.learning_rate = args.learning_rate if args.learning_rate != None else LEARNING_RATE_DEFAULT
         self.batch_size = args.batch_size if args.batch_size != None else BATCH_SIZE_DEFAULT
+        self.adam_epsilon = args.adam_epsilon if args.adam_epsilon != None else 0.01/self.batch_size
 
         self.model_type = self.MODEL_TYPE_FC
 

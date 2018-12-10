@@ -71,7 +71,7 @@ class Environment:
         steps = 0
         while True:
             steps += self.run_episode(-1)
-            if MEMORY_SIZE_TO_START_REPLY < steps:
+            if self.config.steps_learning_start < steps:
                 break
 
         for episode in range(NUM_EPISODE):
