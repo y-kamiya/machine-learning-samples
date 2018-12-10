@@ -168,6 +168,7 @@ class Brain:
         return F.smooth_l1_loss(input, target)
 
     def lossCategorical(self, transitions, weights):
+        num_atoms = self.config.num_atoms
         batch_size = len(transitions)
         batch = Transition(*zip(*transitions))
 
@@ -189,10 +190,13 @@ class Brain:
             self.target_model.reset_noise()
             p_next = F.softmax(self.target_model(non_final_next_state), dim=2)
 
-            p_next_best = torch.zeros(batch_size, self.config.num_atoms).to(self.config.device, dtype=torch.float32)
+            p_next_best = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
 
-            Tz = (reward_batch.unsqueeze(1) + GAMMA * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
+            gamma = torch.zeros(batch_size, num_atoms)
+            gamma[non_final_mask] = GAMMA
+
+            Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
             b = (Tz - self.Vmin) / self.delta_z
             l = b.floor()
             u = b.ceil()
@@ -202,7 +206,7 @@ class Brain:
         log_p_a = log_p[range(batch_size), action_batch.squeeze()]
         # log_p = F.log_softmax(self.model(state_batch), dim=2)[range(batch_size), action_batch]
 
-        m = torch.zeros(self.config.num_atoms).to(self.config.device, dtype=torch.float32)
+        m = torch.zeros(num_atoms).to(self.config.device, dtype=torch.float32)
         m.index_add_(0, l.long().view(-1), (p_next_best * (u - b) * log_p_a).view(-1))
         m.index_add_(0, u.long().view(-1), (p_next_best * (b - l) * log_p_a).view(-1))
 
