@@ -26,13 +26,12 @@ class NetFC(nn.Module):
         return self.fc3(x)
 
 class DuelingNetFC(nn.Module):
-    def __init__(self, num_states, num_actions, num_atoms=1, is_noisy=False, apply_softmax=False):
+    def __init__(self, num_states, num_actions, num_atoms=1, is_noisy=False):
         super(DuelingNetFC, self).__init__()
         self.num_states = num_states
         self.num_actions = num_actions
         self.is_noisy = is_noisy
         self.num_atoms = num_atoms
-        self.apply_softmax = apply_softmax
 
         num_node_value = num_atoms
         num_node_advantage = num_actions * num_atoms
@@ -70,9 +69,6 @@ class DuelingNetFC(nn.Module):
         averageA = a.mean(1, keepdim=True)
         output = v + (a - averageA)
 
-        if self.apply_softmax:
-            return F.softmax(output)
-
         return output
 
 class NetConv2d(nn.Module):
@@ -100,13 +96,12 @@ class NetConv2d(nn.Module):
         return self.fc2(x)
 
 class DuelingNetConv2d(nn.Module):
-    def __init__(self, num_states, num_actions, num_atoms=1, is_noisy=False, apply_softmax=False):
+    def __init__(self, num_states, num_actions, num_atoms=1, is_noisy=False):
         super(DuelingNetConv2d, self).__init__()
         self.num_states = num_states
         self.num_actions = num_actions
         self.is_noisy = is_noisy
         self.num_atoms = num_atoms
-        self.apply_softmax = apply_softmax
 
         self.conv1 = nn.Conv2d(num_states, 16, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
@@ -147,9 +142,6 @@ class DuelingNetConv2d(nn.Module):
 
         averageA = a.mean(1, keepdim=True)
         output = v + (a - averageA)
-
-        if self.apply_softmax:
-            return F.softmax(output)
 
         return output
 

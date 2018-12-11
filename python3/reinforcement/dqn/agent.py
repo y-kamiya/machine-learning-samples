@@ -158,7 +158,7 @@ class Brain:
         if not self.config.use_categorical:
             return model_output
 
-        return torch.sum(model_output * self.support.expand_as(model_output), dim=2)
+        return torch.sum(F.softmax(model_output, dim=2) * self.support, dim=2)
 
     def loss(self, input, target, weights):
         if self.config.use_IS:
@@ -179,8 +179,6 @@ class Brain:
         reward_batch = torch.cat(batch.reward).to(torch.float32)
         
         next_states = [s for s in batch.next_state if s is not None]
-        if len(next_states) == 0:
-            return torch.tensor(0, dtype=torch.float32).to(torch.float32)
 
         with torch.no_grad():
             non_final_next_state = torch.cat(next_states).to(torch.float32)
@@ -192,27 +190,32 @@ class Brain:
 
             p_next_best = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
+            # print('p_next_best: {}'.format(p_next_best))
 
             gamma = torch.zeros(batch_size, num_atoms)
             gamma[non_final_mask] = GAMMA
 
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
+            # print("Tz: {}".format(Tz))
             b = (Tz - self.Vmin) / self.delta_z
             l = b.floor()
             u = b.ceil()
 
+            m = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
+            offset = torch.linspace(0, ((batch_size-1) * num_atoms), batch_size).unsqueeze(1).expand(batch_size, num_atoms).to(action_batch)
+            m.view(-1).index_add_(0, (l.long() + offset).view(-1), (p_next_best * (u - b)).view(-1))
+            m.view(-1).index_add_(0, (u.long() + offset).view(-1), (p_next_best * (b - l)).view(-1))
+
         self.model.reset_noise()
         log_p = F.log_softmax(self.model(state_batch), dim=2)
         log_p_a = log_p[range(batch_size), action_batch.squeeze()]
+        # print("log_p: {}".format(log_p))
         # log_p = F.log_softmax(self.model(state_batch), dim=2)[range(batch_size), action_batch]
-
-        m = torch.zeros(num_atoms).to(self.config.device, dtype=torch.float32)
-        m.index_add_(0, l.long().view(-1), (p_next_best * (u - b) * log_p_a).view(-1))
-        m.index_add_(0, u.long().view(-1), (p_next_best * (b - l) * log_p_a).view(-1))
 
         # print(a, action_batch, log_p)
         # loss = (-1) * m.sum(dim=1)
-        loss = (-1) * m.sum() / batch_size
+        loss = -torch.sum(m * log_p_a, dim=1).mean()
+        # loss = (-1) * m.sum() / batch_size
         # print(m)
         # print(log_p_a)
         #
@@ -282,6 +285,7 @@ class Brain:
             with torch.no_grad():
                 Q = self._get_Q(self.model, state.to(torch.float32))
                 action = Q.max(1)[1].view(1, 1)
+                print("action: {}, Q: {}".format(action, Q))
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
