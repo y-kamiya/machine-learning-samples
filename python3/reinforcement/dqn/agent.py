@@ -198,13 +198,17 @@ class Brain:
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
             # print("Tz: {}".format(Tz))
             b = (Tz - self.Vmin) / self.delta_z
-            l = b.floor()
-            u = b.ceil()
+            l = b.floor().long()
+            u = b.ceil().long()
+
+            l[(l == u) * (0 < l)] -= 1
+            # the values in l has already changed, so same index is not processed for u
+            u[(l == u) * (u < num_atoms - 1)] += 1
 
             m = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
-            offset = torch.linspace(0, ((batch_size-1) * num_atoms), batch_size).unsqueeze(1).expand(batch_size, num_atoms).to(action_batch)
-            m.view(-1).index_add_(0, (l.long() + offset).view(-1), (p_next_best * (u - b)).view(-1))
-            m.view(-1).index_add_(0, (u.long() + offset).view(-1), (p_next_best * (b - l)).view(-1))
+            offset = torch.linspace(0, ((batch_size-1) * num_atoms), batch_size).unsqueeze(1).expand(batch_size, num_atoms).to(l)
+            m.view(-1).index_add_(0, (l + offset).view(-1), (p_next_best * (u.float() - b)).view(-1))
+            m.view(-1).index_add_(0, (u + offset).view(-1), (p_next_best * (b - l.float())).view(-1))
 
         self.model.reset_noise()
         log_p = F.log_softmax(self.model(state_batch), dim=2)
@@ -220,6 +224,14 @@ class Brain:
         # print(log_p_a)
         #
         print('loss: {}'.format(loss))
+        # print('r: {}'.format(reward_batch[0]))
+        # print('Tz: {}'.format(Tz[0]))
+        # print('b: {}'.format(b[0]))
+        # print('p_next_best: {}'.format(p_next_best[0]))
+        # print('m: {}'.format(m[0]))
+        # p_a = F.softmax(self.model(state_batch), dim=2)
+        # print('p_a: {}'.format(p_a[range(batch_size), action_batch.squeeze()][0]))
+        # print('log_p_a: {}'.format(log_p_a[0]))
         # import sys
         # sys.exit()
         return loss
@@ -283,9 +295,11 @@ class Brain:
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             with torch.no_grad():
-                Q = self._get_Q(self.model, state.to(torch.float32))
+                model_output = F.softmax(self.model(state.to(torch.float32)), dim=2)
+                Q = torch.sum(model_output * self.support, dim=2)
                 action = Q.max(1)[1].view(1, 1)
-                print("action: {}, Q: {}".format(action, Q))
+                # print("action: {}, Q: {}".format(action, Q), model_output, model_output * self.support)
+                # print("state: {}".format(state))
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
