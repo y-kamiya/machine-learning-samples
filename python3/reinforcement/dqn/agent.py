@@ -105,7 +105,7 @@ class Brain:
         self.Vmin = self.Vmax * (-1)
         if num_atoms != 1:
             self.delta_z = (self.Vmax - self.Vmin) / (num_atoms - 1)
-            self.support = torch.Tensor([self.Vmin + i * self.delta_z for i in range(num_atoms)])
+            self.support = torch.Tensor([self.Vmin + i * self.delta_z for i in range(num_atoms)]).to(device=config.device)
 
         print(self.model)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate, eps=self.config.adam_epsilon)
@@ -192,7 +192,7 @@ class Brain:
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
             # print('p_next_best: {}'.format(p_next_best))
 
-            gamma = torch.zeros(batch_size, num_atoms)
+            gamma = torch.zeros(batch_size, num_atoms).to(self.config.device)
             gamma[non_final_mask] = GAMMA
 
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
@@ -212,6 +212,9 @@ class Brain:
 
         self.model.reset_noise()
         log_p = F.log_softmax(self.model(state_batch), dim=2)
+        # print("log_p:{}".format(log_p))
+        # print("action_batch:{}".format(action_batch.squeeze()))
+        #
         log_p_a = log_p[range(batch_size), action_batch.squeeze()]
         # print("log_p: {}".format(log_p))
         # log_p = F.log_softmax(self.model(state_batch), dim=2)[range(batch_size), action_batch]

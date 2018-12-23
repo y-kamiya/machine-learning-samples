@@ -67,9 +67,8 @@ class DuelingNetFC(nn.Module):
         a = A.view(-1, self.num_actions, self.num_atoms)
 
         averageA = a.mean(1, keepdim=True)
-        output = v + (a - averageA)
+        return v.expand(-1, self.num_actions, self.num_atoms) + (a - averageA.expand(-1, self.num_actions, self.num_atoms))
 
-        return output
 
 class NetConv2d(nn.Module):
     def __init__(self, num_states, num_actions, num_atoms=1):
@@ -141,9 +140,7 @@ class DuelingNetConv2d(nn.Module):
         a = A.view(-1, self.num_actions, self.num_atoms)
 
         averageA = a.mean(1, keepdim=True)
-        output = v + (a - averageA)
-
-        return output
+        return v.expand(-1, self.num_actions, self.num_atoms) + (a - averageA.expand(-1, self.num_actions, self.num_atoms))
 
 class FactorizedNoisy(nn.Module):
     def __init__(self, in_features, out_features):
