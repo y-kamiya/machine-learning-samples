@@ -168,7 +168,7 @@ class Brain:
 
         return F.smooth_l1_loss(input, target)
 
-    def loss_categorical(self, transitions, weights):
+    def loss_categorical(self, transitions):
         num_atoms = self.config.num_atoms
         batch_size = len(transitions)
         batch = Transition(*zip(*transitions))
@@ -222,12 +222,11 @@ class Brain:
 
         # print(a, action_batch, log_p)
         # loss = (-1) * m.sum(dim=1)
-        loss = -torch.sum(m * log_p_a, dim=1).mean()
+        loss = -torch.sum(m * log_p_a, dim=1)
         # loss = (-1) * m.sum() / batch_size
         # print(m)
         # print(log_p_a)
         #
-        print('loss: {}'.format(loss))
         # print('r: {}'.format(reward_batch[0]))
         # print('Tz: {}'.format(Tz[0]))
         # print('b: {}'.format(b[0]))
@@ -253,19 +252,28 @@ class Brain:
         indexes, transitions, weights = self.memory.sample(self.config.batch_size, episode)
 
         if self.config.use_categorical:
-            loss = self.loss_categorical(transitions, weights)
+            losses = self.loss_categorical(transitions)
+            self._update_memory(indexes, losses)
+            loss = losses.mean()
         else:
-            values, expected_values = self._get_state_action_values(transitions)
-            loss = self.loss(values, expected_values, weights)
+            values, expected = self._get_state_action_values(transitions)
+            with torch.no_grad():
+                self._update_memory(indexes, torch.abs(expected - values))
+            loss = self.loss(values, expected, weights)
+
+        print('loss: {}'.format(loss))
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        if (indexes != None):
-            for i, value in enumerate(values):
-                td_error = abs(expected_values[i].item() - value.item())
-                self.memory.update(indexes[i], td_error)
+    def _update_memory(self, indexes, values):
+        if (indexes == None):
+            return
+
+        for i, index in enumerate(indexes):
+            self.memory.update(index, values[i].item())
+
 
     def add_memory(self, transition):
         if 1 < self.config.num_multi_step_reward:
@@ -302,7 +310,7 @@ class Brain:
                 Q = self._get_Q(self.model, state.float())
                 # model_output = self.model(state.float(), ApplySoftmax.NORMAL)
                 # Q = torch.sum(model_output * self.support, dim=2)
-                action = Q.max(1)[1].view(1, 1)
+                action = Q.argmax().view(1,1)
                 # print("action: {}, Q: {}".format(action, Q), model_output, model_output * self.support)
                 # print("state: {}".format(state))
         else:
