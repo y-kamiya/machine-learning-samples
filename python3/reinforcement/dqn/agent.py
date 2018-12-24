@@ -189,7 +189,7 @@ class Brain:
             self.target_model.reset_noise()
             p_next = self.target_model(non_final_next_state, ApplySoftmax.NORMAL)
 
-            p_next_best = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
+            p_next_best = torch.zeros(0).to(self.config.device, dtype=torch.float32).new_full((batch_size, num_atoms), 1.0 / num_atoms)
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
             # print('p_next_best: {}'.format(p_next_best))
 
@@ -228,10 +228,10 @@ class Brain:
         # print(log_p_a)
         #
         # print('r: {}'.format(reward_batch[0]))
-        # print('Tz: {}'.format(Tz[0]))
-        # print('b: {}'.format(b[0]))
-        # print('p_next_best: {}'.format(p_next_best[0]))
-        # print('m: {}'.format(m[0]))
+        # print('Tz: {}'.format(Tz))
+        # print('b: {}'.format(b))
+        # print('p_next_best: {}'.format(p_next_best))
+        # print('m: {}'.format(m))
         # p_a = F.softmax(self.model(state_batch), dim=2)
         # print('p_a: {}'.format(p_a[range(batch_size), action_batch.squeeze()][0]))
         # print('log_p_a: {}'.format(log_p_a[0]))
