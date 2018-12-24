@@ -191,13 +191,11 @@ class Brain:
 
             p_next_best = torch.zeros(0).to(self.config.device, dtype=torch.float32).new_full((batch_size, num_atoms), 1.0 / num_atoms)
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
-            # print('p_next_best: {}'.format(p_next_best))
 
             gamma = torch.zeros(batch_size, num_atoms).to(self.config.device)
             gamma[non_final_mask] = GAMMA
 
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
-            # print("Tz: {}".format(Tz))
             b = (Tz - self.Vmin) / self.delta_z
             l = b.floor().long()
             u = b.ceil().long()
@@ -213,35 +211,9 @@ class Brain:
 
         self.model.reset_noise()
         log_p = self.model(state_batch, ApplySoftmax.LOG)
-        # print("log_p:{}".format(log_p))
-        # print("action_batch:{}".format(action_batch.squeeze()))
-        #
         log_p_a = log_p[range(batch_size), action_batch.squeeze()]
-        # print("log_p: {}".format(log_p))
-        # log_p = F.log_softmax(self.model(state_batch), dim=2)[range(batch_size), action_batch]
 
-        # print(a, action_batch, log_p)
-        # loss = (-1) * m.sum(dim=1)
-        losses = -torch.sum(m * log_p_a, dim=1)
-        # loss = (-1) * m.sum() / batch_size
-        # print(m)
-        # print(log_p_a)
-        #
-        # print('r: {}'.format(reward_batch[0]))
-        # print('Tz: {}'.format(Tz))
-        # print('b: {}'.format(b))
-        # print('p_next_best: {}'.format(p_next_best))
-        # print('m: {}'.format(m))
-        # p_a = F.softmax(self.model(state_batch), dim=2)
-        # print('p_a: {}'.format(p_a[range(batch_size), action_batch.squeeze()][0]))
-        # print('log_p_a: {}'.format(log_p_a[0]))
-        # import sys
-        # sys.exit()
-        return losses
-        # return loss.mean()
-        # if self.config.use_IS:
-        # ws = torch.from_numpy(weights).to(device=self.config.device)
-        # return (loss * ws).mean()
+        return -torch.sum(m * log_p_a, dim=1)
 
     def replay(self, episode):
         if len(self.memory) < self.config.steps_learning_start:
@@ -260,8 +232,6 @@ class Brain:
             with torch.no_grad():
                 self._update_memory(indexes, torch.abs(expected - values))
             loss = self.loss(values, expected, weights)
-
-        # print('loss: {}'.format(loss))
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -308,11 +278,7 @@ class Brain:
             self.model.eval()
             with torch.no_grad():
                 Q = self._get_Q(self.model, state.float())
-                # model_output = self.model(state.float(), ApplySoftmax.NORMAL)
-                # Q = torch.sum(model_output * self.support, dim=2)
                 action = Q.argmax().view(1,1)
-                # print("action: {}, Q: {}".format(action, Q), model_output, model_output * self.support)
-                # print("state: {}".format(state))
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
