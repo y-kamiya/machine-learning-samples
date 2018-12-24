@@ -11,7 +11,7 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 
-from model import DuelingNetFC, DuelingNetConv2d
+from model import *
 from config import Config
 from sum_tree import SumTree
 
@@ -153,12 +153,13 @@ class Brain:
 
     def _get_Q(self, model, model_input):
         model.reset_noise()
-        model_output = model(model_input)
 
         if not self.config.use_categorical:
-            return model_output
+            return model(model_input)
 
-        return torch.sum(F.softmax(model_output, dim=2) * self.support, dim=2)
+        model_output = model(model_input, ApplySoftmax.NORMAL)
+
+        return torch.sum(model_output * self.support, dim=2)
 
     def loss(self, input, target, weights):
         if self.config.use_IS:
@@ -167,7 +168,7 @@ class Brain:
 
         return F.smooth_l1_loss(input, target)
 
-    def lossCategorical(self, transitions, weights):
+    def loss_categorical(self, transitions, weights):
         num_atoms = self.config.num_atoms
         batch_size = len(transitions)
         batch = Transition(*zip(*transitions))
@@ -186,7 +187,7 @@ class Brain:
             best_actions = self._get_Q(self.model, non_final_next_state).argmax(dim=1)
 
             self.target_model.reset_noise()
-            p_next = F.softmax(self.target_model(non_final_next_state), dim=2)
+            p_next = self.target_model(non_final_next_state, ApplySoftmax.NORMAL)
 
             p_next_best = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
@@ -211,7 +212,7 @@ class Brain:
             m.view(-1).index_add_(0, (u + offset).view(-1), (p_next_best * (b - l.float())).view(-1))
 
         self.model.reset_noise()
-        log_p = F.log_softmax(self.model(state_batch), dim=2)
+        log_p = self.model(state_batch, ApplySoftmax.LOG)
         # print("log_p:{}".format(log_p))
         # print("action_batch:{}".format(action_batch.squeeze()))
         #
@@ -252,7 +253,7 @@ class Brain:
         indexes, transitions, weights = self.memory.sample(self.config.batch_size, episode)
 
         if self.config.use_categorical:
-            loss = self.lossCategorical(transitions, weights)
+            loss = self.loss_categorical(transitions, weights)
         else:
             values, expected_values = self._get_state_action_values(transitions)
             loss = self.loss(values, expected_values, weights)
@@ -298,8 +299,9 @@ class Brain:
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             with torch.no_grad():
-                model_output = F.softmax(self.model(state.to(torch.float32)), dim=2)
-                Q = torch.sum(model_output * self.support, dim=2)
+                Q = self._get_Q(self.model, state.float())
+                # model_output = self.model(state.float(), ApplySoftmax.NORMAL)
+                # Q = torch.sum(model_output * self.support, dim=2)
                 action = Q.max(1)[1].view(1, 1)
                 # print("action: {}, Q: {}".format(action, Q), model_output, model_output * self.support)
                 # print("state: {}".format(state))
