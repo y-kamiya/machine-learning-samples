@@ -222,7 +222,7 @@ class Brain:
 
         # print(a, action_batch, log_p)
         # loss = (-1) * m.sum(dim=1)
-        loss = -torch.sum(m * log_p_a, dim=1)
+        losses = -torch.sum(m * log_p_a, dim=1)
         # loss = (-1) * m.sum() / batch_size
         # print(m)
         # print(log_p_a)
@@ -237,7 +237,7 @@ class Brain:
         # print('log_p_a: {}'.format(log_p_a[0]))
         # import sys
         # sys.exit()
-        return loss
+        return losses
         # return loss.mean()
         # if self.config.use_IS:
         # ws = torch.from_numpy(weights).to(device=self.config.device)
@@ -254,14 +254,14 @@ class Brain:
         if self.config.use_categorical:
             losses = self.loss_categorical(transitions)
             self._update_memory(indexes, losses)
-            loss = losses.mean()
+            loss = (losses * torch.from_numpy(weights)).mean() if self.config.use_IS else losses.mean()
         else:
             values, expected = self._get_state_action_values(transitions)
             with torch.no_grad():
                 self._update_memory(indexes, torch.abs(expected - values))
             loss = self.loss(values, expected, weights)
 
-        print('loss: {}'.format(loss))
+        # print('loss: {}'.format(loss))
 
         self.optimizer.zero_grad()
         loss.backward()
