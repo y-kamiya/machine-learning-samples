@@ -11,7 +11,7 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 
-from model import DuelingNetFC, DuelingNetConv2d
+from model import *
 from config import Config
 from sum_tree import SumTree
 
@@ -88,7 +88,7 @@ class PERMemory:
         return self.size
 
 class Brain:
-    def __init__(self, config, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions, num_atoms):
         self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
@@ -100,15 +100,23 @@ class Brain:
         self.model = self._create_model(config, num_states, num_actions)
         self.target_model = copy.deepcopy(self.model)
         self.target_model.eval()
+
+        self.Vmax = self.config.categorical_v
+        self.Vmin = self.Vmax * (-1)
+        if num_atoms != 1:
+            self.delta_z = (self.Vmax - self.Vmin) / (num_atoms - 1)
+            self.support = torch.Tensor([self.Vmin + i * self.delta_z for i in range(num_atoms)]).to(device=config.device)
+
         print(self.model)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.learning_rate, eps=self.config.adam_epsilon)
     
     def _create_model(self, config, num_states, num_actions):
         use_noisy = self.config.use_noisy_network
+        num_atoms = self.config.num_atoms
         if config.model_type == Config.MODEL_TYPE_CONV2D:
-            return DuelingNetConv2d(num_states, num_actions, use_noisy).to(device=config.device)
+            return DuelingNetConv2d(num_states, num_actions, num_atoms, use_noisy).to(device=config.device)
 
-        return DuelingNetFC(num_states, num_actions, use_noisy).to(device=config.device)
+        return DuelingNetFC(num_states, num_actions, num_atoms, use_noisy).to(device=config.device)
 
     def _get_state_action_values(self, transitions):
         batch_size = len(transitions)
@@ -126,20 +134,32 @@ class Brain:
         if len(next_states) != 0:
             with torch.no_grad():
                 non_final_next_state = torch.cat(next_states).to(torch.float32)
-                self.model.reset_noise()
-                best_actions = torch.argmax(self.model(non_final_next_state), dim=1, keepdim=True)
-                self.target_model.reset_noise()
-                next_state_values[non_final_mask] = self.target_model(non_final_next_state).gather(1, best_actions).squeeze()
+
+                Q = self._get_Q(self.model, non_final_next_state)
+                best_actions = torch.argmax(Q, dim=1, keepdim=True)
+
+                Q_target = self._get_Q(self.target_model, non_final_next_state)
+                next_state_values[non_final_mask] = Q_target.gather(1, best_actions).squeeze()
 
         gamma = GAMMA ** self.config.num_multi_step_reward
         expected_values = reward_batch + gamma * next_state_values
 
         with torch.set_grad_enabled(self.model.training):
-            self.model.reset_noise()
-            values = torch.squeeze(self.model(state_batch).gather(1, action_batch))
+            Q = self._get_Q(self.model, state_batch)
+            values = torch.squeeze(Q.gather(1, action_batch))
             values.to(self.config.device, dtype=torch.float32)
 
         return (values, expected_values)
+
+    def _get_Q(self, model, model_input):
+        model.reset_noise()
+
+        if not self.config.use_categorical:
+            return model(model_input)
+
+        model_output = model(model_input, ApplySoftmax.NORMAL)
+
+        return torch.sum(model_output * self.support, dim=2)
 
     def loss(self, input, target, weights):
         if self.config.use_IS:
@@ -148,6 +168,53 @@ class Brain:
 
         return F.smooth_l1_loss(input, target)
 
+    def loss_categorical(self, transitions):
+        num_atoms = self.config.num_atoms
+        batch_size = len(transitions)
+        batch = Transition(*zip(*transitions))
+
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.uint8, device=self.config.device)
+
+        state_batch = torch.cat(batch.state).to(torch.float32)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward).to(torch.float32)
+        
+        next_states = [s for s in batch.next_state if s is not None]
+
+        with torch.no_grad():
+            non_final_next_state = torch.cat(next_states).to(torch.float32)
+
+            best_actions = self._get_Q(self.model, non_final_next_state).argmax(dim=1)
+
+            self.target_model.reset_noise()
+            p_next = self.target_model(non_final_next_state, ApplySoftmax.NORMAL)
+
+            p_next_best = torch.zeros(0).to(self.config.device, dtype=torch.float32).new_full((batch_size, num_atoms), 1.0 / num_atoms)
+            p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
+
+            gamma = torch.zeros(batch_size, num_atoms).to(self.config.device)
+            gamma[non_final_mask] = GAMMA
+
+            Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
+            b = (Tz - self.Vmin) / self.delta_z
+            l = b.floor().long()
+            u = b.ceil().long()
+
+            l[(l == u) * (0 < l)] -= 1
+            # the values in l has already changed, so same index is not processed for u
+            u[(l == u) * (u < num_atoms - 1)] += 1
+
+            m = torch.zeros(batch_size, num_atoms).to(self.config.device, dtype=torch.float32)
+            offset = torch.linspace(0, ((batch_size-1) * num_atoms), batch_size).unsqueeze(1).expand(batch_size, num_atoms).to(l)
+            m.view(-1).index_add_(0, (l + offset).view(-1), (p_next_best * (u.float() - b)).view(-1))
+            m.view(-1).index_add_(0, (u + offset).view(-1), (p_next_best * (b - l.float())).view(-1))
+
+        self.model.reset_noise()
+        log_p = self.model(state_batch, ApplySoftmax.LOG)
+        log_p_a = log_p[range(batch_size), action_batch.squeeze()]
+
+        return -torch.sum(m * log_p_a, dim=1)
+
     def replay(self, episode):
         if len(self.memory) < self.config.steps_learning_start:
             return
@@ -155,17 +222,28 @@ class Brain:
         self.model.train()
 
         indexes, transitions, weights = self.memory.sample(self.config.batch_size, episode)
-        values, expected_values = self._get_state_action_values(transitions)
 
-        loss = self.loss(values, expected_values, weights)
+        if self.config.use_categorical:
+            losses = self.loss_categorical(transitions)
+            self._update_memory(indexes, losses)
+            loss = (losses * torch.from_numpy(weights)).mean() if self.config.use_IS else losses.mean()
+        else:
+            values, expected = self._get_state_action_values(transitions)
+            with torch.no_grad():
+                self._update_memory(indexes, torch.abs(expected - values))
+            loss = self.loss(values, expected, weights)
+
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        if (indexes != None):
-            for i, value in enumerate(values):
-                td_error = abs(expected_values[i].item() - value.item())
-                self.memory.update(indexes[i], td_error)
+    def _update_memory(self, indexes, values):
+        if (indexes == None):
+            return
+
+        for i, index in enumerate(indexes):
+            self.memory.update(index, values[i].item())
+
 
     def add_memory(self, transition):
         if 1 < self.config.num_multi_step_reward:
@@ -199,8 +277,8 @@ class Brain:
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
             with torch.no_grad():
-                self.model.reset_noise()
-                action = self.model(state.to(torch.float32)).max(1)[1].view(1, 1)
+                Q = self._get_Q(self.model, state.float())
+                action = Q.argmax().view(1,1)
         else:
             rand = random.randrange(self.num_actions)
             action = torch.tensor([[rand]], dtype=torch.long, device=self.config.device)
@@ -225,12 +303,12 @@ class Brain:
         torch.save(self.model.state_dict(), path)
 
 class Agent:
-    def __init__(self, config, num_states, num_actions):
+    def __init__(self, config, num_states, num_actions, num_atoms):
         self.config = config
         self.num_states = num_states
         self.num_actions = num_actions
         self.steps_accumulated = 0
-        self.brain = Brain(config, num_states, num_actions)
+        self.brain = Brain(config, num_states, num_actions, num_atoms)
 
     def learn(self, episode):
         self.brain.replay(episode)

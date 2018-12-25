@@ -24,7 +24,7 @@ class Environment:
         self.env = wrap_deepmind(make_atari(ENV), frame_stack=True)
         self.num_states = self.env.observation_space.shape[-1]
         self.num_actions = self.env.action_space.n
-        self.agent = Agent(config, self.num_states, self.num_actions)
+        self.agent = Agent(config, self.num_states, self.num_actions, self.config.num_atoms)
         self.total_step = np.zeros(100)
 
         self.data_path = config.data_path

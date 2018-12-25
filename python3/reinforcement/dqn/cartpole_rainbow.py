@@ -27,7 +27,7 @@ class Environment:
         # self.env = wrappers.Monitor(self.env, '/tmp/gym/cartpole_dqn', force=True)
         self.num_states = self.env.observation_space.shape[0]
         self.num_actions = self.env.action_space.n
-        self.agent = Agent(config, self.num_states, self.num_actions)
+        self.agent = Agent(config, self.num_states, self.num_actions, config.num_atoms)
         self.total_step = np.zeros(100)
 
     def is_success_episode(self, step):
@@ -71,7 +71,7 @@ class Environment:
         steps = 0
         while True:
             steps += self.run_episode(-1)
-            if MEMORY_SIZE_TO_START_REPLY < steps:
+            if self.config.steps_learning_start < steps:
                 break
 
         for episode in range(NUM_EPISODE):
