@@ -226,7 +226,7 @@ class Brain:
         if self.config.use_categorical:
             losses = self.loss_categorical(transitions)
             self._update_memory(indexes, losses)
-            loss = (losses * torch.from_numpy(weights)).mean() if self.config.use_IS else losses.mean()
+            loss = (losses * torch.from_numpy(weights).to(losses)).mean() if self.config.use_IS else losses.mean()
         else:
             values, expected = self._get_state_action_values(transitions)
             with torch.no_grad():
