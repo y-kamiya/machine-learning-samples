@@ -193,7 +193,7 @@ class Brain:
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
 
             gamma = torch.zeros(batch_size, num_atoms).to(self.config.device)
-            gamma[non_final_mask] = GAMMA
+            gamma[non_final_mask] = GAMMA ** self.config.num_multi_step_reward
 
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
             b = (Tz - self.Vmin) / self.delta_z
