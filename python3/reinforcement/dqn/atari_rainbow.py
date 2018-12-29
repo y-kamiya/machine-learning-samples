@@ -96,6 +96,7 @@ class Environment:
 if __name__ == '__main__':
     argv = sys.argv[1:]
     config = Config(argv)
+    print(" ".join(sys.argv))
 
     for i in range(config.num_epochs):
         env = Environment(config)
