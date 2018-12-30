@@ -64,9 +64,10 @@ class Environment:
             total_reward += reward
             reward = torch.tensor([reward], dtype=torch.uint8, device=self.config.device)
 
-            if not self.config.is_render and step % self.config.replay_interval == 0:
+            if not self.config.is_render:
                 self.agent.observe(state, action, state_next, reward)
-                self.agent.learn(episode)
+                if step % self.config.replay_interval == 0:
+                    self.agent.learn(episode)
 
             state = state_next
 
