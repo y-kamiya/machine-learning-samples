@@ -14,8 +14,6 @@ from agent import Agent
 
 ENV = 'CartPole-v0'
 MAX_STEPS = 200
-NUM_EPISODE = 500
-MEMORY_SIZE_TO_START_REPLY = 1000
 NUM_STEPS_TO_SUCCEED = 195
 MEAN_STEPS_TO_SUCCEED = 150
 
@@ -56,7 +54,8 @@ class Environment:
                 state_next = torch.from_numpy(observation_next).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
             self.agent.observe(state, action, state_next, reward)
-            self.agent.learn(episode)
+            if step % self.config.replay_interval == 0:
+                self.agent.learn(episode)
 
             state = state_next
 
@@ -74,7 +73,7 @@ class Environment:
             if self.config.steps_learning_start < steps:
                 break
 
-        for episode in range(NUM_EPISODE):
+        for episode in range(self.config.num_episodes):
             if MEAN_STEPS_TO_SUCCEED <= self.total_step.mean():
                 print('over {0} steps of average last 100 episodes, last episode: {1}'.format(MEAN_STEPS_TO_SUCCEED, episode))
                 break
