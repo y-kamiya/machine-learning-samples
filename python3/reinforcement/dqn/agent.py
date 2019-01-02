@@ -271,8 +271,11 @@ class Brain:
 
         return Transition(state, action, transition.next_state, nstep_reward)
 
-    def decide_action(self, state, episode):
-        epsilon = 0.5 * (1 / (episode + 1 + 0.001))
+    def decide_action(self, state, step):
+        start = self.config.epsilon_start;
+        end = self.config.epsilon_end;
+        epsilon = start + (end - start) * step / self.config.epsilon_end_step
+        epsilon = max(end, min(start, epsilon))
 
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()

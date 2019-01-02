@@ -31,13 +31,13 @@ class Environment:
     def is_success_episode(self, step):
         return NUM_STEPS_TO_SUCCEED <= step
 
-    def run_episode(self, episode):
+    def run_episode(self, episode, steps_accumulated=0):
         start_time = time.time()
         observation = self.env.reset()
         state = torch.from_numpy(observation).to(self.config.device, dtype=torch.float32).unsqueeze(0)
 
         for step in range(MAX_STEPS):
-            action = self.agent.get_action(state, episode)
+            action = self.agent.get_action(state, step + steps_accumulated)
 
             observation_next, _, done, _ = self.env.step(action.item())
 
@@ -73,13 +73,13 @@ class Environment:
             if self.config.steps_learning_start < steps:
                 break
 
+        steps = 0
         for episode in range(self.config.num_episodes):
             if MEAN_STEPS_TO_SUCCEED <= self.total_step.mean():
                 print('over {0} steps of average last 100 episodes, last episode: {1}, steps: {2}'.format(MEAN_STEPS_TO_SUCCEED, episode, steps))
-                steps = 0
                 break
 
-            steps += self.run_episode(episode)
+            steps += self.run_episode(episode, steps)
 
         self.env.close()
         

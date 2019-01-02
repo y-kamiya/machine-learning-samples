@@ -39,7 +39,7 @@ class Environment:
         ret[3] = observation[:, :, 3]
         return ret
 
-    def run_episode(self, episode):
+    def run_episode(self, episode, steps_accumulated=0):
         start_time = time.time()
         total_reward = 0
         observation = self.prepro(self.env.reset())
@@ -50,7 +50,7 @@ class Environment:
                 time.sleep(0.064)
                 self.env.render()
 
-            action = self.agent.get_action(state, episode)
+            action = self.agent.get_action(state, step + steps_accumulated)
 
             observation_next, reward, done, _ = self.env.step(action.item())
 
@@ -86,8 +86,9 @@ class Environment:
                 if self.config.steps_learning_start <= steps:
                     break
 
+        steps = 0
         for episode in range(self.config.num_episodes):
-            _ = self.run_episode(episode)
+            steps += self.run_episode(episode, steps)
 
         self.env.close()
 
