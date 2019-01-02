@@ -75,10 +75,11 @@ class Environment:
 
         for episode in range(self.config.num_episodes):
             if MEAN_STEPS_TO_SUCCEED <= self.total_step.mean():
-                print('over {0} steps of average last 100 episodes, last episode: {1}'.format(MEAN_STEPS_TO_SUCCEED, episode))
+                print('over {0} steps of average last 100 episodes, last episode: {1}, steps: {2}'.format(MEAN_STEPS_TO_SUCCEED, episode, steps))
+                steps = 0
                 break
 
-            _ = self.run_episode(episode)
+            steps += self.run_episode(episode)
 
         self.env.close()
         
