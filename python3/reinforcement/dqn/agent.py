@@ -43,7 +43,7 @@ class ReplayMemory:
 
 class PERMemory:
     EPSILON = 0.0001
-    ALPHA = 0.6
+    ALPHA = 0.5
     BETA = 0.4
     size = 0
 
