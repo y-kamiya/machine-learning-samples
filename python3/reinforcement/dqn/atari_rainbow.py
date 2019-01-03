@@ -76,7 +76,7 @@ class Environment:
                 print('episode: {0}, steps: {1}, mean steps {2}, time: {3}, reward: {4}'.format(episode, step, self.total_step.mean(), elapsed_time, total_reward))
                 return step + 1
 
-        return MAX_STEPS
+        return self.config.num_steps
 
     def run(self):
         if not self.config.is_render:
