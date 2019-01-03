@@ -13,15 +13,13 @@ from utils import make_atari, wrap_deepmind
 from config import Config
 from agent import Agent
 
-ENV = 'BreakoutNoFrameskip-v4'
-
 class Environment:
     def __init__(self, config):
         config.model_type = Config.MODEL_TYPE_CONV2D
 
         print(config.device)
         self.config = config
-        self.env = wrap_deepmind(make_atari(ENV), frame_stack=True)
+        self.env = wrap_deepmind(make_atari(config.env), frame_stack=True)
         self.num_states = self.env.observation_space.shape[-1]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(config, self.num_states, self.num_actions, self.config.num_atoms)
