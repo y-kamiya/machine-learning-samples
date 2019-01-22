@@ -260,14 +260,19 @@ class Brain:
         if len(self.multi_step_transitions) < self.config.num_multi_step_reward:
             return None
 
+        next_state = transition.next_state
         nstep_reward = 0
         for i in range(self.config.num_multi_step_reward):
             r = self.multi_step_transitions[i].reward
             nstep_reward += r * self.config.gamma ** i
 
+            if self.multi_step_transitions[i].next_state is None:
+                next_state = None
+                break
+
         state, action, _, _ = self.multi_step_transitions.pop(0)
 
-        return Transition(state, action, transition.next_state, nstep_reward)
+        return Transition(state, action, next_state, nstep_reward)
 
     def decide_action(self, state, step):
         start = self.config.epsilon_start;
