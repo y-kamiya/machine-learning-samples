@@ -13,15 +13,13 @@ from utils import make_atari, wrap_deepmind
 from config import Config
 from agent import Agent
 
-ENV = 'BreakoutNoFrameskip-v4'
-
 class Environment:
     def __init__(self, config):
         config.model_type = Config.MODEL_TYPE_CONV2D
 
         print(config.device)
         self.config = config
-        self.env = wrap_deepmind(make_atari(ENV), frame_stack=True)
+        self.env = wrap_deepmind(make_atari(config.env), frame_stack=True)
         self.num_states = self.env.observation_space.shape[-1]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(config, self.num_states, self.num_actions, self.config.num_atoms)
@@ -39,7 +37,7 @@ class Environment:
         ret[3] = observation[:, :, 3]
         return ret
 
-    def run_episode(self, episode):
+    def run_episode(self, episode, steps_accumulated=0):
         start_time = time.time()
         total_reward = 0
         observation = self.prepro(self.env.reset())
@@ -50,7 +48,7 @@ class Environment:
                 time.sleep(0.064)
                 self.env.render()
 
-            action = self.agent.get_action(state, episode)
+            action = self.agent.get_action(state, step + steps_accumulated)
 
             observation_next, reward, done, _ = self.env.step(action.item())
 
@@ -76,7 +74,7 @@ class Environment:
                 print('episode: {0}, steps: {1}, mean steps {2}, time: {3}, reward: {4}'.format(episode, step, self.total_step.mean(), elapsed_time, total_reward))
                 return step + 1
 
-        return MAX_STEPS
+        return self.config.num_steps
 
     def run(self):
         if not self.config.is_render:
@@ -86,8 +84,9 @@ class Environment:
                 if self.config.steps_learning_start <= steps:
                     break
 
+        steps = 0
         for episode in range(self.config.num_episodes):
-            _ = self.run_episode(episode)
+            steps += self.run_episode(episode, steps)
 
         self.env.close()
 

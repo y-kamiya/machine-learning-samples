@@ -17,8 +17,6 @@ from sum_tree import SumTree
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
-GAMMA = 0.99
-
 class ReplayMemory:
     def __init__(self, capacity):
         self.capacity = capacity
@@ -43,7 +41,7 @@ class ReplayMemory:
 
 class PERMemory:
     EPSILON = 0.0001
-    ALPHA = 0.6
+    ALPHA = 0.5
     BETA = 0.4
     size = 0
 
@@ -141,7 +139,7 @@ class Brain:
                 Q_target = self._get_Q(self.target_model, non_final_next_state)
                 next_state_values[non_final_mask] = Q_target.gather(1, best_actions).squeeze()
 
-        gamma = GAMMA ** self.config.num_multi_step_reward
+        gamma = self.config.gamma ** self.config.num_multi_step_reward
         expected_values = reward_batch + gamma * next_state_values
 
         with torch.set_grad_enabled(self.model.training):
@@ -193,7 +191,7 @@ class Brain:
             p_next_best[non_final_mask] = p_next[range(len(non_final_next_state)), best_actions]
 
             gamma = torch.zeros(batch_size, num_atoms).to(self.config.device)
-            gamma[non_final_mask] = GAMMA ** self.config.num_multi_step_reward
+            gamma[non_final_mask] = self.config.gamma ** self.config.num_multi_step_reward
 
             Tz = (reward_batch.unsqueeze(1) + gamma * self.support.unsqueeze(0)).clamp(self.Vmin, self.Vmax)
             b = (Tz - self.Vmin) / self.delta_z
@@ -265,14 +263,17 @@ class Brain:
         nstep_reward = 0
         for i in range(self.config.num_multi_step_reward):
             r = self.multi_step_transitions[i].reward
-            nstep_reward += r * GAMMA ** i
+            nstep_reward += r * self.config.gamma ** i
 
         state, action, _, _ = self.multi_step_transitions.pop(0)
 
         return Transition(state, action, transition.next_state, nstep_reward)
 
-    def decide_action(self, state, episode):
-        epsilon = 0.5 * (1 / (episode + 1 + 0.001))
+    def decide_action(self, state, step):
+        start = self.config.epsilon_start;
+        end = self.config.epsilon_end;
+        epsilon = start + (end - start) * step / self.config.epsilon_end_step
+        epsilon = max(end, min(start, epsilon))
 
         if self.config.use_noisy_network or epsilon < random.uniform(0, 1):
             self.model.eval()
