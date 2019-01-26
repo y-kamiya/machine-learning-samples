@@ -42,7 +42,7 @@ class ReplayMemory:
 class PERMemory:
     EPSILON = 0.0001
     ALPHA = 0.5
-    BETA = 0.4
+    BETA = 0.5
     size = 0
 
     def __init__(self, config, capacity):
@@ -67,8 +67,9 @@ class PERMemory:
         indexes = []
         weights = np.empty(size, dtype='float32')
         total = self.tree.total()
-        beta = self.BETA + (1 - self.BETA) * episode / self.config.num_episodes
-        beta = min(1.0, beta)
+        # beta = self.BETA + (1 - self.BETA) * episode / self.config.num_episodes
+        # beta = min(1.0, beta)
+        beta = BETA
 
         for i, rand in enumerate(np.random.uniform(0, total, size)):
             (idx, priority, data) = self.tree.get(rand)
