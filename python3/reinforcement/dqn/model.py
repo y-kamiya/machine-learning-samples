@@ -117,23 +117,26 @@ class DuelingNetConv2d(nn.Module):
         self.num_atoms = num_atoms
         self.apply_softmax = apply_softmax
 
-        self.conv1 = nn.Conv2d(num_states, 16, kernel_size=8, stride=4)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
+        self.conv1 = nn.Conv2d(num_states, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
 
         num_node_value = num_atoms
         num_node_advantage = num_actions * num_atoms
 
+        hidden_size = 512
+
         if is_noisy:
-            # 9 * 9 * 32 = 2592
-            self.fcV1 = FactorizedNoisy(2592, 256)
-            self.fcA1 = FactorizedNoisy(2592, 256)
-            self.fcV2 = FactorizedNoisy(256, num_node_value)
-            self.fcA2 = FactorizedNoisy(256, num_node_advantage)
+            # 7 * 7 * 64 = 3136
+            self.fcV1 = FactorizedNoisy(3136, hidden_size)
+            self.fcA1 = FactorizedNoisy(3136, hidden_size)
+            self.fcV2 = FactorizedNoisy(hidden_size, num_node_value)
+            self.fcA2 = FactorizedNoisy(hidden_size, num_node_advantage)
         else:
-            self.fcV1 = nn.Linear(2592, 256)
-            self.fcA1 = nn.Linear(2592, 256)
-            self.fcV2 = nn.Linear(256, num_node_value)
-            self.fcA2 = nn.Linear(256, num_node_advantage)
+            self.fcV1 = nn.Linear(3136, hidden_size)
+            self.fcA1 = nn.Linear(3136, hidden_size)
+            self.fcV2 = nn.Linear(hidden_size, num_node_value)
+            self.fcA2 = nn.Linear(hidden_size, num_node_advantage)
 
     def reset_noise(self):
         if not self.is_noisy:
@@ -147,7 +150,8 @@ class DuelingNetConv2d(nn.Module):
     def forward(self, x, apply_softmax=ApplySoftmax.NONE):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = x.view([-1, 2592])
+        x = F.relu(self.conv3(x))
+        x = x.view([-1, 3136])
         V = self.fcV2(F.relu(self.fcV1(x)))
         A = self.fcA2(F.relu(self.fcA1(x)))
 
