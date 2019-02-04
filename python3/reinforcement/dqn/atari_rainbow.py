@@ -19,7 +19,7 @@ class Environment:
 
         print(config.device)
         self.config = config
-        self.env = wrap_deepmind(make_atari(config.env), frame_stack=True)
+        self.env = wrap_deepmind(make_atari(config.env), episode_life=False, frame_stack=True)
         self.num_states = self.env.observation_space.shape[-1]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(config, self.num_states, self.num_actions, self.config.num_atoms)
