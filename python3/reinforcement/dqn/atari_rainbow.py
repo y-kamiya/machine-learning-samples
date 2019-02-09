@@ -19,7 +19,7 @@ class Environment:
 
         print(config.device)
         self.config = config
-        self.env = wrap_deepmind(make_atari(config.env), episode_life=False, frame_stack=True)
+        self.env = wrap_deepmind(make_atari(config.env), episode_life=False, clip_rewards=False, frame_stack=True)
         self.num_states = self.env.observation_space.shape[-1]
         self.num_actions = self.env.action_space.n
         self.agent = Agent(config, self.num_states, self.num_actions, self.config.num_atoms)
@@ -58,6 +58,9 @@ class Environment:
             else:
                 state_next = self.prepro(observation_next)
                 state_next = torch.from_numpy(state_next).to(self.config.device, dtype=torch.uint8).unsqueeze(0)
+
+            if reward != 0:
+                print('episode: {0}, step: {1}, reward:{2}'.format(episode, step, reward))
 
             total_reward += reward
             reward = torch.tensor([reward], dtype=torch.uint8, device=self.config.device)
