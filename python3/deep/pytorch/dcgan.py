@@ -130,8 +130,8 @@ if __name__ == '__main__':
 
             print("[{}/{}][{}/{}] Loss_D: {} Loss_G: {} D(x): {} D(G(x)): {} / {}".format(epoch, args.epochs, i, len(dataloader), loss_discriminator.item(), loss_generator.item(), D_x, D_G_z1, D_G_z2))
 
-        torch.save(generator.state_dict(), 'generator_epoch_{}.dat'.format(epoch))
-        torch.save(discriminator.state_dict(), 'discriminator_epoch_{}.dat'.format(epoch))
+        torch.save(generator.state_dict(), 'data/generator_epoch_{}.dat'.format(epoch))
+        torch.save(discriminator.state_dict(), 'data/discriminator_epoch_{}.dat'.format(epoch))
 
 
 
