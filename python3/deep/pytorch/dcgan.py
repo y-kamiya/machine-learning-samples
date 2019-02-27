@@ -1,3 +1,4 @@
+import sys
 import argparse
 import torch
 from torch import nn
@@ -64,6 +65,13 @@ class Discriminator(nn.Module):
         x = self.leaky_relu(self.batch_norm4(self.conv4(x)))
         return F.sigmoid(self.conv5(x))
 
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
 if __name__ == '__main__':
 
@@ -73,6 +81,9 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--learning_rate', type=float, default=0.0002, help='learning rate for Adam')
     parser.add_argument('--dataroot', default='data', help='path to the data directory')
+    parser.add_argument('--generator', help='file path to data for generator')
+    parser.add_argument('--discriminator', help='file path to data for discriminator')
+    parser.add_argument('--no_training', action='store_true', help='no training')
     args = parser.parse_args()
     print(args)
 
@@ -87,8 +98,21 @@ if __name__ == '__main__':
                            ]))
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
-    generator = Generator()
-    discriminator = Discriminator()
+    generator = Generator().to(device)
+    generator.apply(weights_init)
+    if args.generator != None:
+        generator.load_state_dict(torch.load(args.generator))
+
+    if args.no_training:
+        z = torch.randn(args.batch_size, 100, device=device)
+        output = generator(z)
+        vutils.save_image(output, 'data/generated.png', normalize=True)
+        sys.exit()
+
+    discriminator = Discriminator().to(device)
+    discriminator.apply(weights_init)
+    if args.discriminator != None:
+        discriminator.load_state_dict(torch.load(args.discriminator))
 
     loss = nn.BCELoss()
 
