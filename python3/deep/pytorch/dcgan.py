@@ -77,6 +77,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
+    parser.add_argument('--save_interval', type=int, default=5, help='save interval epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='epoch count')
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--learning_rate', type=float, default=0.0002, help='learning rate for Adam')
@@ -154,8 +155,9 @@ if __name__ == '__main__':
 
             print("[{}/{}][{}/{}] Loss_D: {} Loss_G: {} D(x): {} D(G(x)): {} / {}".format(epoch, args.epochs, i, len(dataloader), loss_discriminator.item(), loss_generator.item(), D_x, D_G_z1, D_G_z2))
 
-        torch.save(generator.state_dict(), 'data/generator_epoch_{}.dat'.format(epoch))
-        torch.save(discriminator.state_dict(), 'data/discriminator_epoch_{}.dat'.format(epoch))
+        if epoch % args.save_interval == 0:
+            torch.save(generator.state_dict(), 'data/generator_epoch_{}.dat'.format(epoch))
+            torch.save(discriminator.state_dict(), 'data/discriminator_epoch_{}.dat'.format(epoch))
 
 
 
