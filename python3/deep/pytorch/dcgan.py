@@ -85,11 +85,13 @@ if __name__ == '__main__':
     parser.add_argument('--generator', help='file path to data for generator')
     parser.add_argument('--discriminator', help='file path to data for discriminator')
     parser.add_argument('--no_training', action='store_true', help='no training')
+    parser.add_argument('--output_dir', default='data', help='output directory')
     args = parser.parse_args()
     print(args)
 
     is_cpu = args.cpu or not torch.cuda.is_available()
-    device = torch.device("cpu" if is_cpu else "cuda:0")
+    device_name = "cpu" if is_cpu else "cuda:0"
+    device = torch.device(device_name)
 
     dataset = dset.MNIST(root=args.dataroot, download=True,
                            transform=transforms.Compose([
@@ -102,7 +104,7 @@ if __name__ == '__main__':
     generator = Generator().to(device)
     generator.apply(weights_init)
     if args.generator != None:
-        generator.load_state_dict(torch.load(args.generator))
+        generator.load_state_dict(torch.load(args.generator, map_location=device_name), strict=False)
 
     if args.no_training:
         z = torch.randn(args.batch_size, 100, device=device)
@@ -113,15 +115,16 @@ if __name__ == '__main__':
     discriminator = Discriminator().to(device)
     discriminator.apply(weights_init)
     if args.discriminator != None:
-        discriminator.load_state_dict(torch.load(args.discriminator))
+        discriminator.load_state_dict(torch.load(args.discriminator, map_location=device_name), strict=False)
 
     loss = nn.BCELoss()
 
     optimizerG = optim.Adam(generator.parameters(), lr=args.learning_rate)
     optimizerD = optim.Adam(discriminator.parameters(), lr=args.learning_rate)
 
+    fixed_noise = torch.randn(args.batch_size, 100, device=device)
 
-    for epoch in range(args.epochs):
+    for epoch in range(1, args.epochs + 1):
         for i, data in enumerate(dataloader, 0):
             real_data = data[0].to(device)
             batch_size = real_data.size(0)
@@ -156,8 +159,13 @@ if __name__ == '__main__':
             print("[{}/{}][{}/{}] Loss_D: {} Loss_G: {} D(x): {} D(G(x)): {} / {}".format(epoch, args.epochs, i, len(dataloader), loss_discriminator.item(), loss_generator.item(), D_x, D_G_z1, D_G_z2))
 
         if epoch % args.save_interval == 0:
-            torch.save(generator.state_dict(), 'data/generator_epoch_{}.dat'.format(epoch))
-            torch.save(discriminator.state_dict(), 'data/discriminator_epoch_{}.dat'.format(epoch))
+            torch.save(generator.state_dict(), '{}/generator_epoch_{}.dat'.format(args.output_dir, epoch))
+            torch.save(discriminator.state_dict(), '{}/discriminator_epoch_{}.dat'.format(args.output_dir, epoch))
+
+            fake = generator(fixed_noise)
+            vutils.save_image(fake.detach(),
+                    '{}/fake_samples_epoch_{}.png'.format(args.output_dir, epoch),
+                    normalize=True)
 
 
 
