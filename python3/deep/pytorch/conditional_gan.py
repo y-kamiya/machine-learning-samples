@@ -127,8 +127,9 @@ if __name__ == '__main__':
         generator.load_state_dict(torch.load(args.generator, map_location=device_name), strict=False)
 
     if args.no_training:
-        z = torch.randn(args.batch_size, 100, device=device)
-        output = generator(z)
+        labels = torch.LongTensor([args.class_label]).repeat(args.batch_size).to(device)
+        noise = generator.build_input(args.batch_size, labels)
+        output = generator(noise)
         vutils.save_image(output, 'data/generated.png', normalize=True)
         sys.exit()
 
@@ -161,7 +162,6 @@ if __name__ == '__main__':
             D_x = output.mean().item()
 
             generator_input = generator.build_input(args.batch_size, class_labels)
-            print(generator_input.shape)
             fake_data = generator(generator_input)
             fake_data = discriminator.build_input(fake_data, class_labels)
             label.fill_(0)
