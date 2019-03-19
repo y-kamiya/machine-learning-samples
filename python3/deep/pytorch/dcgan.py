@@ -10,12 +10,13 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
 class Generator(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes):
         super(Generator, self).__init__()
 
         self.channels = 256
         self.rows = 3
-        self.fc1 = nn.Linear(100, self.rows * self.rows * self.channels)
+        self.num_classes = num_classes
+        self.fc1 = nn.Linear(100 + num_classes, self.rows * self.rows * self.channels)
 
         self.conv1 = nn.ConvTranspose2d(self.channels,     self.channels // 2, kernel_size=2, stride=2, padding=1)
         self.conv2 = nn.ConvTranspose2d(self.channels // 2, self.channels // 4, kernel_size=2, stride=2, padding=1)
@@ -35,15 +36,23 @@ class Generator(nn.Module):
         x = F.relu(self.batch_norm4(self.conv3(x)))
         return F.tanh(self.conv4(x))
 
+    def build_input(self, batch_size, class_labels):
+        z = torch.randn(batch_size, 100, device=device)
+        if self.num_classes == 0:
+            return z
+
+        y = torch.zeros(batch_size, self.num_classes).scatter_(1, class_labels.view(-1, 1), 1).to(device)
+        return torch.cat([z, y], dim=1)
 
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes):
         super(Discriminator, self).__init__()
 
         self.channels = 256
         self.rows = 3
+        self.num_classes = num_classes
 
-        self.conv1 = nn.Conv2d(1, self.channels // 8, kernel_size=3, stride=3, padding=1)
+        self.conv1 = nn.Conv2d(1 + num_classes, self.channels // 8, kernel_size=3, stride=3, padding=1)
         self.conv2 = nn.Conv2d(self.channels // 8, self.channels // 4, kernel_size=2, stride=2, padding=1)
         self.conv3 = nn.Conv2d(self.channels // 4, self.channels // 2, kernel_size=2, stride=2, padding=1)
         self.conv4 = nn.Conv2d(self.channels // 2, self.channels, kernel_size=2, stride=2, padding=1)
@@ -65,6 +74,21 @@ class Discriminator(nn.Module):
         x = self.leaky_relu(self.batch_norm4(self.conv4(x)))
         return F.sigmoid(self.conv5(x))
 
+    def build_input(self, data, class_labels):
+        if self.num_classes == 0:
+            return data
+
+        batch_size = data.shape[0]
+        width = data.shape[2]
+        height = data.shape[3]
+
+        y = torch.zeros(batch_size, args.classes, width * height)
+        for i, num in enumerate(class_labels):
+            y.data[i][num].fill_(1)
+        y = y.view(-1, args.classes, width, height)
+
+        return torch.cat([data, y], dim=1)
+
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -77,6 +101,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
+    parser.add_argument('--classes', type=int, default=10, help='class count, 0 means normal dcgan')
+    parser.add_argument('--class_label', type=int, default=0, help='class label to generate')
     parser.add_argument('--save_interval', type=int, default=5, help='save interval epochs')
     parser.add_argument('--batch_size', type=int, default=32, help='epoch count')
     parser.add_argument('--cpu', action='store_true', help='use cpu')
@@ -101,18 +127,19 @@ if __name__ == '__main__':
                            ]))
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
-    generator = Generator().to(device)
+    generator = Generator(args.classes).to(device)
     generator.apply(weights_init)
     if args.generator != None:
         generator.load_state_dict(torch.load(args.generator, map_location=device_name), strict=False)
 
     if args.no_training:
-        z = torch.randn(args.batch_size, 100, device=device)
-        output = generator(z)
+        labels = torch.LongTensor([args.class_label]).repeat(args.batch_size).to(device)
+        noise = generator.build_input(args.batch_size, labels)
+        output = generator(noise)
         vutils.save_image(output, 'data/generated.png', normalize=True)
         sys.exit()
 
-    discriminator = Discriminator().to(device)
+    discriminator = Discriminator(args.classes).to(device)
     discriminator.apply(weights_init)
     if args.discriminator != None:
         discriminator.load_state_dict(torch.load(args.discriminator, map_location=device_name), strict=False)
@@ -122,22 +149,27 @@ if __name__ == '__main__':
     optimizerG = optim.Adam(generator.parameters(), lr=args.learning_rate)
     optimizerD = optim.Adam(discriminator.parameters(), lr=args.learning_rate)
 
-    fixed_noise = torch.randn(args.batch_size, 100, device=device)
+    labels = torch.LongTensor([args.class_label]).repeat(args.batch_size).to(device)
+    fixed_noise = generator.build_input(args.batch_size, labels)
 
     for epoch in range(1, args.epochs + 1):
-        for i, data in enumerate(dataloader, 0):
-            real_data = data[0].to(device)
+        for i, (data, class_labels) in enumerate(dataloader, 0):
+            real_data = data.to(device)
             batch_size = real_data.size(0)
 
             discriminator.zero_grad()
+
+            input_data = discriminator.build_input(real_data, class_labels)
+            output = discriminator(input_data)
+
             label = torch.full((batch_size,), 1, device=device)
-            output = discriminator(real_data)
             loss_with_real = loss(output, label)
             loss_with_real.backward()
             D_x = output.mean().item()
 
-            z = torch.randn(batch_size, 100, device=device)
-            fake_data = generator(z)
+            generator_input = generator.build_input(args.batch_size, class_labels)
+            fake_data = generator(generator_input)
+            fake_data = discriminator.build_input(fake_data, class_labels)
             label.fill_(0)
             output = discriminator(fake_data.detach())
             loss_with_fake = loss(output, label)
