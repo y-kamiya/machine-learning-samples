@@ -127,7 +127,13 @@ class Pix2Pix():
     def __init__(self, config):
         self.config = config
         self.netG = Generator().to(self.config.device)
+        if self.config.generator != None:
+            self.netG.load_state_dict(torch.load(self.config.generator, map_location=self.config.device_name), strict=False)
+
         self.netD = Discriminator().to(self.config.device)
+        if self.config.discriminator != None:
+            self.netD.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
+
         self.optimizerG = optim.Adam(self.netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.optimizerD = optim.Adam(self.netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.criterionGAN = GANLoss().to(self.config.device)
@@ -261,6 +267,8 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default='data', help='output directory')
     parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
     parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+    parser.add_argument('--generator', help='file path to data for generator')
+    parser.add_argument('--discriminator', help='file path to data for discriminator')
     args = parser.parse_args()
     print(args)
 
