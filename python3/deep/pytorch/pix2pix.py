@@ -126,16 +126,16 @@ class GANLoss(nn.Module):
 class Pix2Pix():
     def __init__(self, config):
         self.config = config
-        self.netG = Generator()
-        self.netD = Discriminator()
+        self.netG = Generator().to(self.config.device)
+        self.netD = Discriminator().to(self.config.device)
         self.optimizerG = optim.Adam(self.netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.optimizerD = optim.Adam(self.netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
-        self.criterionGAN = GANLoss()
+        self.criterionGAN = GANLoss().to(self.config.device)
         self.criterionL1 = nn.L1Loss()
 
     def train(self, data):
-        self.realA = data['A']
-        self.realB = data['B']
+        self.realA = data['A'].to(self.config.device)
+        self.realB = data['B'].to(self.config.device)
 
         fakeB = self.netG(self.realA)
 
@@ -265,8 +265,8 @@ if __name__ == '__main__':
     print(args)
 
     is_cpu = args.cpu or not torch.cuda.is_available()
-    device_name = "cpu" if is_cpu else "cuda:0"
-    device = torch.device(device_name)
+    args.device_name = "cpu" if is_cpu else "cuda:0"
+    args.device = torch.device(args.device_name)
 
     model = Pix2Pix(args)
     dataset = AlignedDataset(args)
