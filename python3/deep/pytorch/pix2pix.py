@@ -276,7 +276,6 @@ if __name__ == '__main__':
         for i, data in enumerate(dataloader):
             model.train(data)
 
-        if True:
-        # if epoch % args.save_interval == 0:
+        if epoch % args.save_interval == 0:
             model.save(epoch)
             model.save_image(epoch)
