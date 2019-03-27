@@ -127,10 +127,12 @@ class Pix2Pix():
     def __init__(self, config):
         self.config = config
         self.netG = Generator().to(self.config.device)
+        self.netG.apply(self.__weights_init)
         if self.config.generator != None:
             self.netG.load_state_dict(torch.load(self.config.generator, map_location=self.config.device_name), strict=False)
 
         self.netD = Discriminator().to(self.config.device)
+        self.netD.apply(self.__weights_init)
         if self.config.discriminator != None:
             self.netD.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
 
@@ -138,6 +140,14 @@ class Pix2Pix():
         self.optimizerD = optim.Adam(self.netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.criterionGAN = GANLoss().to(self.config.device)
         self.criterionL1 = nn.L1Loss()
+
+    def __weights_init(self, m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            m.weight.data.normal_(0.0, 0.02)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.normal_(1.0, 0.02)
+            m.bias.data.fill_(0)
 
     def train(self, data):
         self.realA = data['A'].to(self.config.device)
