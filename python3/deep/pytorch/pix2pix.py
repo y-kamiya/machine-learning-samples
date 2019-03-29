@@ -2,6 +2,7 @@ import sys
 import argparse
 import os.path
 import random
+import time
 import numpy as np
 import torch
 from torch import nn
@@ -141,6 +142,8 @@ class Pix2Pix():
         self.criterionGAN = GANLoss().to(self.config.device)
         self.criterionL1 = nn.L1Loss()
 
+        self.training_start_time = time.time()
+
     def __weights_init(self, m):
         classname = m.__class__.__name__
         if classname.find('Conv') != -1:
@@ -182,7 +185,12 @@ class Pix2Pix():
         lossG.backward()
         self.optimizerG.step()
 
+        # for log
         self.fakeB = fakeB
+        self.lossG_GAN = lossG_GAN
+        self.lossG_L1 = lossG_L1
+        self.lossD_real = lossD_real
+        self.lossD_fake = lossD_fake
 
     def save(self, epoch):
         output_dir = self.config.output_dir
@@ -194,6 +202,15 @@ class Pix2Pix():
         vutils.save_image(output_image,
                 '{}/pix2pix_epoch_{}.png'.format(self.config.output_dir, epoch),
                 normalize=True)
+
+    def print_loss(self, epoch):
+        elapsed_time = time.time() - self.training_start_time
+        message = '(epoch: {}, time: {:.3f}, lossG_GAN: {:.3f}, lossG_L1: {:.3f}, lossD_real: {:.3f}, lossD_fake: {:.3f}) '.format(epoch, elapsed_time, self.lossG_GAN, self.lossG_L1, self.lossD_real, self.lossD_fake)
+
+        log_file = '{}/pix2pix.log'.format(self.config.output_dir)
+        with open(log_file, "a") as log_file:
+            log_file.write('{}\n'.format(message))  # save the message
+
 
 
 class AlignedDataset(Dataset):
@@ -269,6 +286,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--epochs', type=int, default=200, help='epoch count')
     parser.add_argument('--save_interval', type=int, default=10, help='save interval epochs')
+    parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='epoch count')
     parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
     parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
@@ -297,3 +315,6 @@ if __name__ == '__main__':
         if epoch % args.save_interval == 0:
             model.save(epoch)
             model.save_image(epoch)
+
+        if epoch % args.log_interval == 0:
+            model.print_loss(epoch)
