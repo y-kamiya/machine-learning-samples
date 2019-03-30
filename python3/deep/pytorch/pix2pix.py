@@ -143,6 +143,7 @@ class Pix2Pix():
         self.criterionL1 = nn.L1Loss()
 
         self.training_start_time = time.time()
+        self.append_log(config)
 
     def __weights_init(self, m):
         classname = m.__class__.__name__
@@ -207,10 +208,12 @@ class Pix2Pix():
         elapsed_time = time.time() - self.training_start_time
         message = '(epoch: {}, time: {:.3f}, lossG_GAN: {:.3f}, lossG_L1: {:.3f}, lossD_real: {:.3f}, lossD_fake: {:.3f}) '.format(epoch, elapsed_time, self.lossG_GAN, self.lossG_L1, self.lossD_real, self.lossD_fake)
 
+        self.append_log(message)
+
+    def append_log(self, message):
         log_file = '{}/pix2pix.log'.format(self.config.output_dir)
         with open(log_file, "a") as log_file:
             log_file.write('{}\n'.format(message))  # save the message
-
 
 
 class AlignedDataset(Dataset):
@@ -285,7 +288,8 @@ class AlignedDataset(Dataset):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--epochs', type=int, default=200, help='epoch count')
-    parser.add_argument('--save_interval', type=int, default=10, help='save interval epochs')
+    parser.add_argument('--save_data_interval', type=int, default=10, help='save data interval epochs')
+    parser.add_argument('--save_image_interval', type=int, default=10, help='save image interval epochs')
     parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='epoch count')
     parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
@@ -312,8 +316,10 @@ if __name__ == '__main__':
         for i, data in enumerate(dataloader):
             model.train(data)
 
-        if epoch % args.save_interval == 0:
+        if epoch % args.save_data_interval == 0:
             model.save(epoch)
+
+        if epoch % args.save_image_interval == 0:
             model.save_image(epoch)
 
         if epoch % args.log_interval == 0:
