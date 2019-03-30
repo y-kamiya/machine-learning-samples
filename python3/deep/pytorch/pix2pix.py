@@ -24,18 +24,18 @@ class Generator(nn.Module):
         self.down4 = self.__down(512, 512)
         self.down5 = self.__down(512, 512)
         self.down6 = self.__down(512, 512)
-        self.down7 = self.__down(512, 512, False)
+        self.down7 = self.__down(512, 512, use_norm=False)
 
         self.up7 = self.__up(512, 512)
-        self.up6 = self.__up(1024, 512)
-        self.up5 = self.__up(1024, 512)
-        self.up4 = self.__up(1024, 512)
+        self.up6 = self.__up(1024, 512, use_dropout=True)
+        self.up5 = self.__up(1024, 512, use_dropout=True)
+        self.up4 = self.__up(1024, 512, use_dropout=True)
         self.up3 = self.__up(1024, 256)
         self.up2 = self.__up(512, 128)
         self.up1 = self.__up(256, 64)
 
         self.up0 = nn.Sequential(
-            self.__up(128, 3, False),
+            self.__up(128, 3, use_norm=False),
             nn.Tanh(),
         )
 
@@ -49,7 +49,7 @@ class Generator(nn.Module):
 
         return nn.Sequential(*layer)
 
-    def __up(self, input, output, use_norm=True):
+    def __up(self, input, output, use_norm=True, use_dropout=False):
         layer = [
             nn.ReLU(True),
             nn.ConvTranspose2d(input, output, kernel_size=4, stride=2, padding=1),
@@ -57,7 +57,8 @@ class Generator(nn.Module):
         if use_norm:
             layer.append(nn.BatchNorm2d(output))
 
-        layer.append(nn.Dropout(0.5))
+        if use_dropout:
+            layer.append(nn.Dropout(0.5))
 
         return nn.Sequential(*layer)
 
