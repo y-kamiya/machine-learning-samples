@@ -144,6 +144,8 @@ class Pix2Pix():
 
         self.training_start_time = time.time()
         self.append_log(config)
+        self.append_log(self.netG)
+        self.append_log(self.netD)
 
     def __weights_init(self, m):
         classname = m.__class__.__name__
