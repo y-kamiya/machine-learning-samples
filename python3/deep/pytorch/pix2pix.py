@@ -94,8 +94,7 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, True),
             self.__layer(64, 128),
             self.__layer(128, 256),
-            self.__layer(256, 512),
-            self.__layer(512, 512, stride=1),
+            self.__layer(256, 512, stride=1),
             nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1),
         )
 
