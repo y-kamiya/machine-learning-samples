@@ -114,7 +114,7 @@ class GANLoss(nn.Module):
 
         self.register_buffer('real_label', torch.tensor(1.0))
         self.register_buffer('fake_label', torch.tensor(0.0))
-        self.loss = nn.MSELoss()
+        self.loss = nn.BCEWithLogitsLoss()
 
     def __call__(self, prediction, is_real):
         if is_real:
