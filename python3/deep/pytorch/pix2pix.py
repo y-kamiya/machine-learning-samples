@@ -2,6 +2,7 @@ import sys
 import argparse
 import os.path
 import random
+import time
 import numpy as np
 import torch
 from torch import nn
@@ -23,18 +24,18 @@ class Generator(nn.Module):
         self.down4 = self.__down(512, 512)
         self.down5 = self.__down(512, 512)
         self.down6 = self.__down(512, 512)
-        self.down7 = self.__down(512, 512, False)
+        self.down7 = self.__down(512, 512, use_norm=False)
 
         self.up7 = self.__up(512, 512)
-        self.up6 = self.__up(1024, 512)
-        self.up5 = self.__up(1024, 512)
-        self.up4 = self.__up(1024, 512)
+        self.up6 = self.__up(1024, 512, use_dropout=True)
+        self.up5 = self.__up(1024, 512, use_dropout=True)
+        self.up4 = self.__up(1024, 512, use_dropout=True)
         self.up3 = self.__up(1024, 256)
         self.up2 = self.__up(512, 128)
         self.up1 = self.__up(256, 64)
 
         self.up0 = nn.Sequential(
-            self.__up(128, 3, False),
+            self.__up(128, 3, use_norm=False),
             nn.Tanh(),
         )
 
@@ -48,7 +49,7 @@ class Generator(nn.Module):
 
         return nn.Sequential(*layer)
 
-    def __up(self, input, output, use_norm=True):
+    def __up(self, input, output, use_norm=True, use_dropout=False):
         layer = [
             nn.ReLU(True),
             nn.ConvTranspose2d(input, output, kernel_size=4, stride=2, padding=1),
@@ -56,7 +57,8 @@ class Generator(nn.Module):
         if use_norm:
             layer.append(nn.BatchNorm2d(output))
 
-        layer.append(nn.Dropout(0.5))
+        if use_dropout:
+            layer.append(nn.Dropout(0.5))
 
         return nn.Sequential(*layer)
 
@@ -92,14 +94,13 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, True),
             self.__layer(64, 128),
             self.__layer(128, 256),
-            self.__layer(256, 512),
-            self.__layer(512, 512),
-            nn.Conv2d(512, 1, kernel_size=4, stride=2, padding=1),
+            self.__layer(256, 512, stride=1),
+            nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1),
         )
 
-    def __layer(self, input, output):
+    def __layer(self, input, output, stride=2):
         return nn.Sequential(
-            nn.Conv2d(input, output, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(input, output, kernel_size=4, stride=stride, padding=1),
             nn.BatchNorm2d(output),
             nn.LeakyReLU(0.2, True)
         )
@@ -113,7 +114,7 @@ class GANLoss(nn.Module):
 
         self.register_buffer('real_label', torch.tensor(1.0))
         self.register_buffer('fake_label', torch.tensor(0.0))
-        self.loss = nn.MSELoss()
+        self.loss = nn.BCEWithLogitsLoss()
 
     def __call__(self, prediction, is_real):
         if is_real:
@@ -126,16 +127,37 @@ class GANLoss(nn.Module):
 class Pix2Pix():
     def __init__(self, config):
         self.config = config
-        self.netG = Generator()
-        self.netD = Discriminator()
+        self.netG = Generator().to(self.config.device)
+        self.netG.apply(self.__weights_init)
+        if self.config.generator != None:
+            self.netG.load_state_dict(torch.load(self.config.generator, map_location=self.config.device_name), strict=False)
+
+        self.netD = Discriminator().to(self.config.device)
+        self.netD.apply(self.__weights_init)
+        if self.config.discriminator != None:
+            self.netD.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
+
         self.optimizerG = optim.Adam(self.netG.parameters(), lr=0.0002, betas=(0.5, 0.999))
         self.optimizerD = optim.Adam(self.netD.parameters(), lr=0.0002, betas=(0.5, 0.999))
-        self.criterionGAN = GANLoss()
+        self.criterionGAN = GANLoss().to(self.config.device)
         self.criterionL1 = nn.L1Loss()
 
+        self.training_start_time = time.time()
+        self.append_log(config)
+        self.append_log(self.netG)
+        self.append_log(self.netD)
+
+    def __weights_init(self, m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            m.weight.data.normal_(0.0, 0.02)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.normal_(1.0, 0.02)
+            m.bias.data.fill_(0)
+
     def train(self, data):
-        self.realA = data['A']
-        self.realB = data['B']
+        self.realA = data['A'].to(self.config.device)
+        self.realB = data['B'].to(self.config.device)
 
         fakeB = self.netG(self.realA)
 
@@ -166,7 +188,12 @@ class Pix2Pix():
         lossG.backward()
         self.optimizerG.step()
 
+        # for log
         self.fakeB = fakeB
+        self.lossG_GAN = lossG_GAN
+        self.lossG_L1 = lossG_L1
+        self.lossD_real = lossD_real
+        self.lossD_fake = lossD_fake
 
     def save(self, epoch):
         output_dir = self.config.output_dir
@@ -178,6 +205,17 @@ class Pix2Pix():
         vutils.save_image(output_image,
                 '{}/pix2pix_epoch_{}.png'.format(self.config.output_dir, epoch),
                 normalize=True)
+
+    def print_loss(self, epoch):
+        elapsed_time = time.time() - self.training_start_time
+        message = '(epoch: {}, time: {:.3f}, lossG_GAN: {:.3f}, lossG_L1: {:.3f}, lossD_real: {:.3f}, lossD_fake: {:.3f}) '.format(epoch, elapsed_time, self.lossG_GAN, self.lossG_L1, self.lossD_real, self.lossD_fake)
+
+        self.append_log(message)
+
+    def append_log(self, message):
+        log_file = '{}/pix2pix.log'.format(self.config.output_dir)
+        with open(log_file, "a") as log_file:
+            log_file.write('{}\n'.format(message))  # save the message
 
 
 class AlignedDataset(Dataset):
@@ -252,7 +290,9 @@ class AlignedDataset(Dataset):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--epochs', type=int, default=200, help='epoch count')
-    parser.add_argument('--save_interval', type=int, default=10, help='save interval epochs')
+    parser.add_argument('--save_data_interval', type=int, default=10, help='save data interval epochs')
+    parser.add_argument('--save_image_interval', type=int, default=10, help='save image interval epochs')
+    parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='epoch count')
     parser.add_argument('--load_size', type=int, default=286, help='scale images to this size')
     parser.add_argument('--crop_size', type=int, default=256, help='then crop to this size')
@@ -261,12 +301,14 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default='data', help='output directory')
     parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
     parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+    parser.add_argument('--generator', help='file path to data for generator')
+    parser.add_argument('--discriminator', help='file path to data for discriminator')
     args = parser.parse_args()
     print(args)
 
     is_cpu = args.cpu or not torch.cuda.is_available()
-    device_name = "cpu" if is_cpu else "cuda:0"
-    device = torch.device(device_name)
+    args.device_name = "cpu" if is_cpu else "cuda:0"
+    args.device = torch.device(args.device_name)
 
     model = Pix2Pix(args)
     dataset = AlignedDataset(args)
@@ -276,7 +318,11 @@ if __name__ == '__main__':
         for i, data in enumerate(dataloader):
             model.train(data)
 
-        if True:
-        # if epoch % args.save_interval == 0:
+        if epoch % args.save_data_interval == 0:
             model.save(epoch)
+
+        if epoch % args.save_image_interval == 0:
             model.save_image(epoch)
+
+        if epoch % args.log_interval == 0:
+            model.print_loss(epoch)
