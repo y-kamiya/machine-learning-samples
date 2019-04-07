@@ -147,10 +147,25 @@ class CycleGAN():
         self.criterionCycle = nn.L1Loss()
         self.criterionL1 = nn.L1Loss()
 
+        self.schedulerG = optim.lr_scheduler.LambdaLR(self.optimizerG, self.__modify_learning_rate)
+        self.schedulerD = optim.lr_scheduler.LambdaLR(self.optimizerD, self.__modify_learning_rate)
+
         self.training_start_time = time.time()
         self.append_log(config)
         self.append_log(self.netG_A)
         self.append_log(self.netD_A)
+
+    def update_learning_rate():
+        self.schedulerG.step()
+        self.schedulerD.step()
+
+    def __modify_learning_rate(self, epoch):
+        print(epoch)
+        if self.epochs_lr_decay_start < 0:
+            return 1.0
+
+        delta = max(0, epoch - self.config.epochs_lr_decay_start) / float(self.config.epochs_lr_decay + 1)
+        return max(0.0, 1.0 - delta)
 
     def __weights_init(self, m):
         classname = m.__class__.__name__
@@ -225,7 +240,7 @@ class CycleGAN():
 
     def print_loss(self, epoch):
         elapsed_time = time.time() - self.training_start_time
-        message = '(epoch: {}, time: {:.3f}, lossG_A: {:.3f}, lossG_B: {:.3f}, lossD_A: {:.3f}, lossD_B: {:.3f}) '.format(epoch, elapsed_time, self.lossG_A, self.lossG_B, self.lossD_A, self.lossD_B)
+        message = '(epoch: {}, time: {:.3f}, lossG_A: {:.3f}, lossG_B: {:.3f}, lossD_A: {:.3f}, lossD_B: {:.3f}), lr: {:.5f} '.format(epoch, elapsed_time, self.lossG_A, self.lossG_B, self.lossD_A, self.lossD_B, self.optimizerG.param_groups[0]['lr'])
 
         self.append_log(message)
 
@@ -233,7 +248,6 @@ class CycleGAN():
         log_file = '{}/cycle.log'.format(self.config.output_dir)
         with open(log_file, "a") as log_file:
             log_file.write('{}\n'.format(message))  # save the message
-
 
 class AlignedDataset(Dataset):
     IMG_EXTENSIONS = ['.png', 'jpg']
@@ -321,6 +335,8 @@ if __name__ == '__main__':
     parser.add_argument('--lambdaB', type=float, default=100.0, help='weight for cycle loss of B')
     parser.add_argument('--generator', help='file path to data for generator')
     parser.add_argument('--discriminator', help='file path to data for discriminator')
+    parser.add_argument('--epochs_lr_decay', type=int, default=0, help='epochs to delay lr to zero')
+    parser.add_argument('--epochs_lr_decay_start', type=int, default=-1, help='epochs to lr delay start')
     args = parser.parse_args()
     print(args)
 
@@ -344,3 +360,5 @@ if __name__ == '__main__':
 
         if epoch % args.log_interval == 0:
             model.print_loss(epoch)
+
+        model.update_learning_rate()
