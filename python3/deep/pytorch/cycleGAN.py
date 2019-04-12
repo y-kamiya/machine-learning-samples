@@ -145,7 +145,7 @@ class CycleGAN():
         self.optimizerD = optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()), lr=0.0002, betas=(0.5, 0.999))
         self.criterionGAN = GANLoss().to(self.config.device)
         self.criterionCycle = nn.L1Loss()
-        self.criterionL1 = nn.L1Loss()
+        self.criterionIdt = nn.L1Loss()
 
         self.schedulerG = optim.lr_scheduler.LambdaLR(self.optimizerG, self.__modify_learning_rate)
         self.schedulerD = optim.lr_scheduler.LambdaLR(self.optimizerD, self.__modify_learning_rate)
@@ -184,14 +184,14 @@ class CycleGAN():
 
         return (lossD_fake + lossD_real) * 0.5
 
-    def calc_lossG(self, netD, real, fake, rec, alpha):
+    def calc_lossG(self, netD, real, fake, rec, lambda_cycle):
         with torch.no_grad():
             pred_fake = netD(fake)
 
         lossG_GAN = self.criterionGAN(pred_fake, True)
         lossG_cycle = self.criterionCycle(rec, real)
 
-        return lossG_GAN + lossG_cycle * alpha
+        return lossG_GAN + lossG_cycle * lambda_cycle
 
     def train(self, data):
         self.realA = data['A'].to(self.config.device)
@@ -215,15 +215,21 @@ class CycleGAN():
         lossG_A = self.calc_lossG(self.netD_A, self.realA, fakeA, recA, self.config.lambdaA)
         lossG_B = self.calc_lossG(self.netD_B, self.realB, fakeB, recB, self.config.lambdaB)
 
+        lossG_idtA = self.criterionIdt(self.netG_B(self.realA), self.realA) * self.config.lambdaA
+        lossG_idtB = self.criterionIdt(self.netG_A(self.realB), self.realB) * self.config.lambdaB
+        lossG_idt = (lossG_idtA + lossG_idtB) * self.config.lambda_idt
+
         self.optimizerG.zero_grad()
         lossG_A.backward()
         lossG_B.backward()
+        lossG_idt.backward()
         self.optimizerG.step()
 
         # for log
         self.fakeB = fakeB
         self.lossG_A = lossG_A
         self.lossG_B = lossG_B
+        self.lossG_idt = lossG_idt
         self.lossD_A = lossD_A
         self.lossD_B = lossD_B
 
@@ -240,7 +246,7 @@ class CycleGAN():
 
     def print_loss(self, epoch):
         elapsed_time = time.time() - self.training_start_time
-        message = '(epoch: {}, time: {:.3f}, lossG_A: {:.3f}, lossG_B: {:.3f}, lossD_A: {:.3f}, lossD_B: {:.3f}), lr: {:.5f} '.format(epoch, elapsed_time, self.lossG_A, self.lossG_B, self.lossD_A, self.lossD_B, self.optimizerG.param_groups[0]['lr'])
+        message = '(epoch: {}, time: {:.3f}, lossG_A: {:.3f}, lossG_B: {:.3f}, lossG_idt: {:.3f}, lossD_A: {:.3f}, lossD_B: {:.3f}), lr: {:.5f} '.format(epoch, elapsed_time, self.lossG_A, self.lossG_B, self.lossG_idt, self.lossD_A, self.lossD_B, self.optimizerG.param_groups[0]['lr'])
 
         self.append_log(message)
 
@@ -333,6 +339,7 @@ if __name__ == '__main__':
     parser.add_argument('--phase', type=str, default='train', help='train, val, test, etc')
     parser.add_argument('--lambdaA', type=float, default=100.0, help='weight for cycle loss of A')
     parser.add_argument('--lambdaB', type=float, default=100.0, help='weight for cycle loss of B')
+    parser.add_argument('--lambda_idt', type=float, default=0.5, help='weight for identity loss')
     parser.add_argument('--generator', help='file path to data for generator')
     parser.add_argument('--discriminator', help='file path to data for discriminator')
     parser.add_argument('--epochs_lr_decay', type=int, default=0, help='epochs to delay lr to zero')
