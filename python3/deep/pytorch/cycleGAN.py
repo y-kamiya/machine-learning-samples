@@ -188,13 +188,12 @@ class CycleGAN():
         self.append_log(self.netG_A)
         self.append_log(self.netD_A)
 
-    def update_learning_rate():
+    def update_learning_rate(self):
         self.schedulerG.step()
         self.schedulerD.step()
 
     def __modify_learning_rate(self, epoch):
-        print(epoch)
-        if self.epochs_lr_decay_start < 0:
+        if self.config.epochs_lr_decay_start < 0:
             return 1.0
 
         delta = max(0, epoch - self.config.epochs_lr_decay_start) / float(self.config.epochs_lr_decay + 1)
