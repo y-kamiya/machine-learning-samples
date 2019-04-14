@@ -159,17 +159,19 @@ class CycleGAN():
         self.netG_B = Generator().to(self.config.device)
         self.netG_A.apply(self.__weights_init)
         self.netG_B.apply(self.__weights_init)
-        if self.config.generator != None:
-            self.netG_A.load_state_dict(torch.load(self.config.generator, map_location=self.config.device_name), strict=False)
-            self.netG_B.load_state_dict(torch.load(self.config.generator, map_location=self.config.device_name), strict=False)
+        if self.config.generatorA != None:
+            self.netG_A.load_state_dict(torch.load(self.config.generatorA, map_location=self.config.device_name), strict=False)
+        if self.config.generatorB != None:
+            self.netG_B.load_state_dict(torch.load(self.config.generatorB, map_location=self.config.device_name), strict=False)
 
         self.netD_A = Discriminator().to(self.config.device)
         self.netD_B = Discriminator().to(self.config.device)
         self.netD_A.apply(self.__weights_init)
         self.netD_B.apply(self.__weights_init)
-        if self.config.discriminator != None:
-            self.netD_A.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
-            self.netD_B.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
+        if self.config.discriminatorA != None:
+            self.netD_A.load_state_dict(torch.load(self.config.discriminatorA, map_location=self.config.device_name), strict=False)
+        if self.config.discriminatorB != None:
+            self.netD_B.load_state_dict(torch.load(self.config.discriminatorB, map_location=self.config.device_name), strict=False)
 
         self.fakeA_pool = ImagePool(config.pool_size)
         self.fakeB_pool = ImagePool(config.pool_size)
@@ -267,8 +269,10 @@ class CycleGAN():
 
     def save(self, epoch):
         output_dir = self.config.output_dir
-        torch.save(self.netG.state_dict(), '{}/cycle_G_epoch_{}'.format(output_dir, epoch))
-        torch.save(self.netD.state_dict(), '{}/cycle_D_epoch_{}'.format(output_dir, epoch))
+        torch.save(self.netG_A.state_dict(), '{}/cycle_G_A_epoch_{}'.format(output_dir, epoch))
+        torch.save(self.netG_B.state_dict(), '{}/cycle_G_B_epoch_{}'.format(output_dir, epoch))
+        torch.save(self.netD_A.state_dict(), '{}/cycle_D_A_epoch_{}'.format(output_dir, epoch))
+        torch.save(self.netD_B.state_dict(), '{}/cycle_D_B_epoch_{}'.format(output_dir, epoch))
 
     def save_image(self, epoch):
         output_image = torch.cat([self.realA, self.fakeB, self.realB], dim=3)
@@ -372,8 +376,10 @@ if __name__ == '__main__':
     parser.add_argument('--lambdaA', type=float, default=100.0, help='weight for cycle loss of A')
     parser.add_argument('--lambdaB', type=float, default=100.0, help='weight for cycle loss of B')
     parser.add_argument('--lambda_idt', type=float, default=0.5, help='weight for identity loss')
-    parser.add_argument('--generator', help='file path to data for generator')
-    parser.add_argument('--discriminator', help='file path to data for discriminator')
+    parser.add_argument('--generatorA', help='file path to data for generator')
+    parser.add_argument('--generatorB', help='file path to data for generator')
+    parser.add_argument('--discriminatorA', help='file path to data for discriminator')
+    parser.add_argument('--discriminatorB', help='file path to data for discriminator')
     parser.add_argument('--epochs_lr_decay', type=int, default=0, help='epochs to delay lr to zero')
     parser.add_argument('--epochs_lr_decay_start', type=int, default=-1, help='epochs to lr delay start')
     parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
