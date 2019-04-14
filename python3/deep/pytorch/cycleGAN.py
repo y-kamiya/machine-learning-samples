@@ -122,6 +122,36 @@ class GANLoss(nn.Module):
 
         return self.loss(prediction, target_tensor.expand_as(prediction))
 
+class ImagePool():
+    def __init__(self, pool_size):
+        self.pool_size = pool_size
+        if self.pool_size > 0:
+            self.num_imgs = 0
+            self.images = []
+
+    def query(self, images):
+        if self.pool_size == 0:
+            return images
+
+        return_images = []
+        for image in images:
+            image = torch.unsqueeze(image.data, 0)
+            if self.num_imgs < self.pool_size:   # if the buffer is not full; keep inserting current images to the buffer
+                self.num_imgs = self.num_imgs + 1
+                self.images.append(image)
+                return_images.append(image)
+            else:
+                p = random.uniform(0, 1)
+                if p > 0.5:  # by 50% chance, the buffer will return a previously stored image, and insert the current image into the buffer
+                    random_id = random.randint(0, self.pool_size - 1)  # randint is inclusive
+                    tmp = self.images[random_id].clone()
+                    self.images[random_id] = image
+                    return_images.append(tmp)
+                else:       # by another 50% chance, the buffer will return the current image
+                    return_images.append(image)
+
+        return torch.cat(return_images, 0)   # collect all the images and return
+
 class CycleGAN():
     def __init__(self, config):
         self.config = config
@@ -140,6 +170,9 @@ class CycleGAN():
         if self.config.discriminator != None:
             self.netD_A.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
             self.netD_B.load_state_dict(torch.load(self.config.discriminator, map_location=self.config.device_name), strict=False)
+
+        self.fakeA_pool = ImagePool(config.pool_size)
+        self.fakeB_pool = ImagePool(config.pool_size)
 
         self.optimizerG = optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()), lr=0.0002, betas=(0.5, 0.999))
         self.optimizerD = optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()), lr=0.0002, betas=(0.5, 0.999))
@@ -212,8 +245,8 @@ class CycleGAN():
         self.optimizerD.step()
 
         # Generator
-        lossG_A = self.calc_lossG(self.netD_A, self.realA, fakeA, recA, self.config.lambdaA)
-        lossG_B = self.calc_lossG(self.netD_B, self.realB, fakeB, recB, self.config.lambdaB)
+        lossG_A = self.calc_lossG(self.netD_A, self.realA, self.fakeA_pool.query(fakeA), recA, self.config.lambdaA)
+        lossG_B = self.calc_lossG(self.netD_B, self.realB, self.fakeB_pool.query(fakeB), recB, self.config.lambdaB)
 
         lossG_idtA = self.criterionIdt(self.netG_B(self.realA), self.realA) * self.config.lambdaA
         lossG_idtB = self.criterionIdt(self.netG_A(self.realB), self.realB) * self.config.lambdaB
@@ -344,6 +377,7 @@ if __name__ == '__main__':
     parser.add_argument('--discriminator', help='file path to data for discriminator')
     parser.add_argument('--epochs_lr_decay', type=int, default=0, help='epochs to delay lr to zero')
     parser.add_argument('--epochs_lr_decay_start', type=int, default=-1, help='epochs to lr delay start')
+    parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
     args = parser.parse_args()
     print(args)
 
