@@ -241,8 +241,7 @@ class CycleGAN():
         lossD_B = self.calc_lossD(self.netD_B, self.realB, fakeB.detach())
 
         self.optimizerD.zero_grad()
-        lossD_A.backward()
-        lossD_B.backward()
+        (lossD_A + lossD_B).backward()
         self.optimizerD.step()
 
         # Generator
@@ -254,9 +253,7 @@ class CycleGAN():
         lossG_idt = (lossG_idtA + lossG_idtB) * self.config.lambda_idt
 
         self.optimizerG.zero_grad()
-        lossG_A.backward()
-        lossG_B.backward()
-        lossG_idt.backward()
+        (lossG_A + lossG_B + lossG_idt).backward()
         self.optimizerG.step()
 
         # for log
@@ -291,14 +288,20 @@ class CycleGAN():
         with open(log_file, "a") as log_file:
             log_file.write('{}\n'.format(message))  # save the message
 
-class AlignedDataset(Dataset):
+class UnalignedDataset(Dataset):
     IMG_EXTENSIONS = ['.png', 'jpg']
 
     def __init__(self, config):
         self.config = config
         
-        dir = os.path.join(config.dataroot, config.phase)
-        self.AB_paths = sorted(self.__make_dataset(dir))
+        dirA = os.path.join(config.dataroot, config.phase + 'A')
+        dirB = os.path.join(config.dataroot, config.phase + 'B')
+
+        self.A_paths = sorted(self.__make_dataset(dirA))
+        self.B_paths = sorted(self.__make_dataset(dirB))
+
+        self.A_size = len(self.A_paths)
+        self.B_size = len(self.B_paths)
 
     @classmethod
     def is_image_file(self, fname):
@@ -344,20 +347,22 @@ class AlignedDataset(Dataset):
         return {'crop_pos': (x, y), 'flip': flip}
 
     def __getitem__(self, index):
-        AB_path = self.AB_paths[index]
-        AB = Image.open(AB_path).convert('RGB')
+        A_path = self.A_paths[index % self.A_size]
+        B_path = self.B_paths[random.randint(0, self.B_size - 1)]
+
+        A_img = Image.open(A_path).convert('RGB')
+        B_img = Image.open(B_path).convert('RGB')
 
         param = self.__transform_param()
-        w, h = AB.size
-        w2 = int(w / 2)
         transform = self.__transform(param)
-        A = transform(AB.crop((0, 0, w2, h)))
-        B = transform(AB.crop((w2, 0, w, h)))
 
-        return {'A': A, 'B': B, 'A_paths': AB_path, 'B_paths': AB_path}
+        A = transform(A_img)
+        B = transform(B_img)
+
+        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
     def __len__(self):
-        return len(self.AB_paths)
+        return max(self.A_size, self.B_size)
 
 
 if __name__ == '__main__':
@@ -391,7 +396,7 @@ if __name__ == '__main__':
     args.device = torch.device(args.device_name)
 
     model = CycleGAN(args)
-    dataset = AlignedDataset(args)
+    dataset = UnalignedDataset(args)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
     for epoch in range(1, args.epochs + 1):
