@@ -237,16 +237,16 @@ class CycleGAN():
         recB = self.netG_A(fakeA)
 
         # Discriminator
-        lossD_A = self.calc_lossD(self.netD_A, self.realA, fakeA.detach())
-        lossD_B = self.calc_lossD(self.netD_B, self.realB, fakeB.detach())
+        lossD_A = self.calc_lossD(self.netD_A, self.realA, self.fakeA_pool.query(fakeA).detach())
+        lossD_B = self.calc_lossD(self.netD_B, self.realB, self.fakeB_pool.query(fakeB).detach())
 
         self.optimizerD.zero_grad()
         (lossD_A + lossD_B).backward()
         self.optimizerD.step()
 
         # Generator
-        lossG_A = self.calc_lossG(self.netD_A, self.realA, self.fakeA_pool.query(fakeA), recA, self.config.lambdaA)
-        lossG_B = self.calc_lossG(self.netD_B, self.realB, self.fakeB_pool.query(fakeB), recB, self.config.lambdaB)
+        lossG_A = self.calc_lossG(self.netD_A, self.realA, fakeA, recA, self.config.lambdaA)
+        lossG_B = self.calc_lossG(self.netD_B, self.realB, fakeB, recB, self.config.lambdaB)
 
         lossG_idtA = self.criterionIdt(self.netG_B(self.realA), self.realA) * self.config.lambdaA
         lossG_idtB = self.criterionIdt(self.netG_A(self.realB), self.realB) * self.config.lambdaB
