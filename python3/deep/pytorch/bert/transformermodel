@@ -1,0 +1,225 @@
+TransformerModel(
+  (position_embeddings): Embedding(512, 768)
+  (lang_embeddings): Embedding(2, 768)
+  (embeddings): Embedding(247, 768, padding_idx=2)
+  (layer_norm_emb): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  (attentions): ModuleList(
+    (0): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (1): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (2): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (3): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (4): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (5): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+  )
+  (layer_norm1): ModuleList(
+    (0): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (1): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (2): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (3): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (4): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (5): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  )
+  (ffns): ModuleList(
+    (0): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (1): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (2): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (3): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (4): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (5): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+  )
+  (layer_norm2): ModuleList(
+    (0): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (1): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (2): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (3): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (4): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (5): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  )
+  (pred_layer): PredLayer(
+    (proj): Linear(in_features=768, out_features=247, bias=True)
+  )
+)
+TransformerModel(
+  (position_embeddings): Embedding(512, 768)
+  (lang_embeddings): Embedding(2, 768)
+  (embeddings): Embedding(247, 768, padding_idx=2)
+  (layer_norm_emb): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  (attentions): ModuleList(
+    (0): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (1): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (2): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (3): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (4): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (5): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+  )
+  (layer_norm1): ModuleList(
+    (0): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (1): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (2): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (3): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (4): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (5): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  )
+  (ffns): ModuleList(
+    (0): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (1): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (2): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (3): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (4): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+    (5): TransformerFFN(
+      (lin1): Linear(in_features=768, out_features=3072, bias=True)
+      (lin2): Linear(in_features=3072, out_features=768, bias=True)
+    )
+  )
+  (layer_norm2): ModuleList(
+    (0): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (1): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (2): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (3): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (4): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (5): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  )
+  (layer_norm15): ModuleList(
+    (0): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (1): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (2): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (3): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (4): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+    (5): LayerNorm(torch.Size([768]), eps=1e-12, elementwise_affine=True)
+  )
+  (encoder_attn): ModuleList(
+    (0): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (1): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (2): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (3): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (4): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+    (5): MultiHeadAttention(
+      (q_lin): Linear(in_features=768, out_features=768, bias=True)
+      (k_lin): Linear(in_features=768, out_features=768, bias=True)
+      (v_lin): Linear(in_features=768, out_features=768, bias=True)
+      (out_lin): Linear(in_features=768, out_features=768, bias=True)
+    )
+  )
+  (pred_layer): PredLayer(
+    (proj): Linear(in_features=768, out_features=247, bias=True)
+  )
+)
+
