@@ -323,7 +323,7 @@ if __name__ == '__main__':
     print(args)
 
     is_cpu = args.cpu or not torch.cuda.is_available()
-    args.device_name = "cpu" if is_cpu else "cuda:0"
+    args.device_name = "cpu" if is_cpu else "cuda"
     args.device = torch.device(args.device_name)
 
     model = Pix2Pix(args)

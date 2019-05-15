@@ -116,7 +116,7 @@ if __name__ == '__main__':
     print(args)
 
     is_cpu = args.cpu or not torch.cuda.is_available()
-    device_name = "cpu" if is_cpu else "cuda:0"
+    device_name = "cpu" if is_cpu else "cuda"
     device = torch.device(device_name)
 
     dataset = dset.MNIST(root=args.dataroot, download=True,
