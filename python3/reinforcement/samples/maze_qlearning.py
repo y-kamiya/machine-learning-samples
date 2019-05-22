@@ -74,6 +74,8 @@ def run_to_goal(Q, epsilon, eta, gamma, pi):
     return [s_history, Q]
 
 if __name__ == '__main__':
+    np.set_printoptions(precision=3, suppress=True)
+
     theta0 = np.array([
        [np.nan, 1, 1, np.nan],
        [np.nan, 1, np.nan, 1],
@@ -87,8 +89,12 @@ if __name__ == '__main__':
 
     [a, b] = theta0.shape
     Q = np.random.rand(a, b) * theta0
+    print('initial Q:')
+    print(Q)
 
     pi0 = softmax_convert_pi_from_theta(theta0)
+    print('initial π:')
+    print(pi0)
 
     eta = 0.1
     gamma = 0.9
@@ -98,22 +104,24 @@ if __name__ == '__main__':
     episode = 1
 
     while is_continue:
+        print("-----------------------------------------")
         print("episode: " + str(episode))
         epsilon = epsilon / 2
         [s_history, Q] = run_to_goal(Q, epsilon, eta, gamma, pi0)
 
         new_v = np.nanmax(Q, axis=1)
-        print(np.sum(np.abs(new_v - v)))
+        # print(np.sum(np.abs(new_v - v)))
+        print('\ncurrent Q:')
+        print(Q)
         v = new_v
 
-        print('step: ' + str(len(s_history)))
+        print('\nsteps to goal: ' + str(len(s_history)))
+        print('history([state, action]): {}'.format(s_history))
 
         episode = episode + 1
         if episode > 100:
             break
 
-    np.set_printoptions(precision=3, suppress=True)
-    print(Q)
     # maze_animation = MazeAnimation()
     # ani = maze_animation.set_data(s_history)
     # maze_animation.show()
