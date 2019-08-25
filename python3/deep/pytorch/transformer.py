@@ -150,18 +150,14 @@ class TransformerModel(nn.Module):
     def forward(self, input, src_enc=None):
         batch_size, n_sentences = input.size()
         (mask, att_mask) = self._get_mask(input)
-        # print('bbbbbbbbbbbbbb')
-        # print(mask)
-        # print('ccccccccccc')
-        # print(att_mask)
 
-        positions = torch.arange(n_sentences).unsqueeze(0)
+        positions = torch.arange(n_sentences).long().unsqueeze(0)
         x = self.token_embeddings(input)
         x = x + self.position_embeddings(positions).expand_as(x)
 
         x = self.layer_norm_emb(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x *= mask.unsqueeze(-1).to(x.dtype)
+        x[mask] = 0
 
         for i in range(self.n_layers):
             x = self.attentions[i](x, x, att_mask)
@@ -170,11 +166,11 @@ class TransformerModel(nn.Module):
                 x = self.source_attentions[i](x, src_enc, mask)
 
             x = self.ffns[i](x)
-            x *= mask.unsqueeze(-1).to(x.dtype)
+            x[mask] = 0
 
         return x
 
-class Trainer():
+class Trainer(object):
     def __init__(self, config):
         self.config = config
         self.encoder = TransformerModel(config, is_decoder=False)
@@ -187,15 +183,24 @@ class Trainer():
         self.optimizer_dec = self._get_optimizer(self.decoder)
         self.scheduler_dec = self._get_scheduler(self.optimizer_dec)
 
-        self.criterion = nn.KLDivLoss(size_average=False)
+        self.criterion = nn.KLDivLoss(size_average=True)
+
+        self.start_time = time.time()
+        self.steps = 0
+        self.stats = {
+            'sentences': 0,
+            'words': 0,
+            'loss': 0.0,
+        }
 
     def _get_optimizer(self, model):
-        return optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9)
+        return optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
     def _get_scheduler(self, optimizer):
         dim = self.config.dim
         warmup = self.config.warmup_steps
-        return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: 1.0 if step <= 0 else dim ** -0.5 * min(step ** -0.5, warmup ** -1.5))
+        return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: 0.99)
+        # return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: 1.0 if step <= 0 else dim ** -0.5 * min(step ** -0.5, warmup ** -1.5))
 
     def _get_batch(self):
         vocab_size = self.config.vocab_size
@@ -216,32 +221,75 @@ class Trainer():
 
         x, y = self._get_batch()
 
+        # print("aaaaaaaaaaaaaaaaaaa")
+        # print(x)
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
+        # print("bbbbbbbbbbbbbbbb")
+        # print(enc_output)
+        # print("ccccccccccccccccc")
+        # print(dec_output)
+        # sys.exit()
 
         gen_output = self._generate(dec_output)
 
         target = torch.zeros_like(gen_output)
         target.scatter_(2, y.unsqueeze(-1), 1)
 
+        # print("ccccccccccccccccc")
+        # print(gen_output)
+        # print("xddddddddddddddddddf")
+        # print(target)
+        self.optimizer_enc.zero_grad()
+        self.optimizer_dec.zero_grad()
+
         loss = self.criterion(gen_output, target)
         loss.backward()
 
         self.optimizer_enc.step()
+        # print("eeeeeeeeeeeeeeeeeeee")
+        # for name, param in self.encoder.named_parameters():
+        #     if param.requires_grad and name == "token_embeddings.weight":
+        #         print(name, param.grad.data)
+        #
         self.optimizer_dec.step()
+
+        self.stats['loss'] = loss.item()
+        self.stats['sentences'] += x.size(0)
+        self.stats['words'] += (y != PAD_ID).sum().item()
+
+    def step_end(self, step):
+        self.steps += 1
+        self._print_log()
+
+        self.scheduler_enc.step()
+        self.scheduler_dec.step()
+
+    def _print_log(self):
+        # if self.steps % args.log_interval != 0:
+            # return
+
+        current_time = time.time()
+        elapsed_time = current_time - self.start_time
+        lr = self.optimizer_enc.param_groups[0]['lr']
+        print('step: {}, loss: {:.2f}, tokens/sec: {:.1f}, lr: {:.3f}'.format(self.steps, self.stats['loss'], self.stats['words'] / elapsed_time, lr))
+
+        self.start_time = current_time
+        self.stats['sentences'] = 0
+        self.stats['words'] = 0
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
-    parser.add_argument('--batch_size', type=int, default=32, help='size of batch')
+    parser.add_argument('--batch_size', type=int, default=2, help='size of batch')
     parser.add_argument('--log_interval', type=int, default=5, help='step num to display log')
-    parser.add_argument('--vocab_size', type=int, default=10, help='vocabulary size for copy task')
+    parser.add_argument('--vocab_size', type=int, default=8, help='vocabulary size for copy task')
     parser.add_argument('--n_layers', type=int, default=3, help='number of layers')
     parser.add_argument('--n_heads', type=int, default=8, help='number of heads for multi head attention')
     parser.add_argument('--n_words', type=int, default=10, help='number of words max')
-    parser.add_argument('--dim', type=int, default=512, help='dimention of word embeddings')
+    parser.add_argument('--dim', type=int, default=8, help='dimention of word embeddings')
     parser.add_argument('--dropout', type=int, default=0.1, help='rate of dropout')
     parser.add_argument('--warmup_steps', type=int, default=100, help='adam lr increases until this steps have passed')
     args = parser.parse_args()
@@ -260,13 +308,9 @@ if __name__ == '__main__':
         start_time = time.time()
 
         # for step, data in enumerate(dataloader):
-        for step in range(200):
+        for i in range(200):
             trainer.step()
-
-            if step % args.log_interval == 0:
-                elapsed_time = time.time() - start_time
-                print('epoch: {:.1f}, step: {}, loss: {:.2f}, tokens/sec: {:.1f}'.format(epoch, step, 0, 0))
-                # trainer.print_loss(step)
+            trainer.step_end(i)
                       
 
 
