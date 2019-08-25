@@ -221,25 +221,14 @@ class Trainer(object):
 
         x, y = self._get_batch()
 
-        # print("aaaaaaaaaaaaaaaaaaa")
-        # print(x)
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
-        # print("bbbbbbbbbbbbbbbb")
-        # print(enc_output)
-        # print("ccccccccccccccccc")
-        # print(dec_output)
-        # sys.exit()
 
         gen_output = self._generate(dec_output)
 
         target = torch.zeros_like(gen_output)
         target.scatter_(2, y.unsqueeze(-1), 1)
 
-        # print("ccccccccccccccccc")
-        # print(gen_output)
-        # print("xddddddddddddddddddf")
-        # print(target)
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
 
@@ -247,11 +236,6 @@ class Trainer(object):
         loss.backward()
 
         self.optimizer_enc.step()
-        # print("eeeeeeeeeeeeeeeeeeee")
-        # for name, param in self.encoder.named_parameters():
-        #     if param.requires_grad and name == "token_embeddings.weight":
-        #         print(name, param.grad.data)
-        #
         self.optimizer_dec.step()
 
         self.stats['loss'] = loss.item()
