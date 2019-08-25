@@ -194,13 +194,17 @@ class Trainer(object):
         }
 
     def _get_optimizer(self, model):
-        return optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
+        return optim.Adam(model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9)
 
     def _get_scheduler(self, optimizer):
         dim = self.config.dim
         warmup = self.config.warmup_steps
-        return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: 0.99)
-        # return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: 1.0 if step <= 0 else dim ** -0.5 * min(step ** -0.5, warmup ** -1.5))
+
+        def update(step):
+            current_step = step + 1
+            return 2 * dim ** -0.5 * min(current_step ** -0.5, current_step * warmup ** -1.5)
+
+        return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=update)
 
     def _get_batch(self):
         vocab_size = self.config.vocab_size
@@ -256,7 +260,7 @@ class Trainer(object):
         current_time = time.time()
         elapsed_time = current_time - self.start_time
         lr = self.optimizer_enc.param_groups[0]['lr']
-        print('step: {}, loss: {:.2f}, tokens/sec: {:.1f}, lr: {:.3f}'.format(self.steps, self.stats['loss'], self.stats['words'] / elapsed_time, lr))
+        print('step: {}, loss: {:.2f}, tokens/sec: {:.1f}, lr: {:.6f}'.format(self.steps, self.stats['loss'], self.stats['words'] / elapsed_time, lr))
 
         self.start_time = current_time
         self.stats['sentences'] = 0
