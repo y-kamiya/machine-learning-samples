@@ -1,3 +1,4 @@
+import os
 import time
 import math
 import argparse
@@ -185,6 +186,14 @@ class Trainer(object):
 
         self.criterion = nn.KLDivLoss(size_average=True)
 
+        if os.path.isfile(config.model):
+            data = torch.load(config.model)
+            self.encoder.load_state_dict(data['encoder'])
+            self.decoder.load_state_dict(data['decoder'])
+            self.generator.load_state_dict(data['generator'])
+            self.optimizer_enc.load_state_dict(data['optimizer_enc'])
+            self.optimizer_dec.load_state_dict(data['optimizer_dec'])
+
         self.start_time = time.time()
         self.steps = 0
         self.stats = {
@@ -192,6 +201,17 @@ class Trainer(object):
             'words': 0,
             'loss': 0.0,
         }
+
+    def save(self):
+        data = {
+            'encoder': self.encoder.state_dict(),
+            'decoder': self.decoder.state_dict(),
+            'generator': self.generator.state_dict(),
+            'optimizer_enc': self.optimizer_enc.state_dict(),
+            'optimizer_dec': self.optimizer_dec.state_dict(),
+        }
+        torch.save(data, self.config.model)
+        print('save model to {}'.format(self.config.model))
 
     def _get_optimizer(self, model):
         return optim.Adam(model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9)
@@ -279,7 +299,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_words', type=int, default=10, help='number of words max')
     parser.add_argument('--dim', type=int, default=8, help='dimention of word embeddings')
     parser.add_argument('--dropout', type=int, default=0.1, help='rate of dropout')
-    parser.add_argument('--warmup_steps', type=int, default=100, help='adam lr increases until this steps have passed')
+    parser.add_argument('--warmup_steps', type=int, default=4000, help='adam lr increases until this steps have passed')
+    parser.add_argument('--model', default='model.pth', help='file to save model parameters')
     args = parser.parse_args()
     print(args)
 
@@ -300,5 +321,6 @@ if __name__ == '__main__':
             trainer.step()
             trainer.step_end(i)
                       
+        trainer.save()
 
 
