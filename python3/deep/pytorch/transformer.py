@@ -320,6 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_steps', type=int, default=4000, help='adam lr increases until this steps have passed')
     parser.add_argument('--model', default='model.pth', help='file to save model parameters')
     parser.add_argument('--generate_test', action='store_true', help='only generate translated sentences')
+    parser.add_argument('--train_test', action='store_true', help='training copy task with random value')
     args = parser.parse_args()
     print(args)
 
@@ -332,16 +333,21 @@ if __name__ == '__main__':
     if args.generate_test:
         trainer.generate_test()
         sys.exit()
+
     # dataset = Dataset(args)
     # dataloader = DataLoader(dataset, batch_size=args.batch_size)
 
     for epoch in range(args.epochs):
         start_time = time.time()
 
+        if args.train_test:
+            for i in range(200):
+                trainer.step()
+                trainer.step_end(i)
+
         # for step, data in enumerate(dataloader):
-        for i in range(200):
-            trainer.step()
-            trainer.step_end(i)
+            # trainer.step()
+            # trainer.step_end(i)
                       
         trainer.save()
 
