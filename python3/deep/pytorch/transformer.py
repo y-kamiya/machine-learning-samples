@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import math
 import argparse
@@ -286,6 +287,23 @@ class Trainer(object):
         self.stats['sentences'] = 0
         self.stats['words'] = 0
 
+    def generate_test(self):
+        self.encoder.eval()
+        self.decoder.eval()
+
+        x, _ = self._get_batch()
+
+        enc_output = self.encoder(x)
+        dec_output = self.decoder(x, enc_output)
+
+        probabilty = self.generator(dec_output)
+        word_ids = torch.argmax(probabilty, dim=-1)
+
+        for i in range(x.size(0)):
+            print('input : {}'.format(x[i]))
+            print('output: {}'.format(word_ids[i])) 
+            print('') 
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
@@ -301,6 +319,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=int, default=0.1, help='rate of dropout')
     parser.add_argument('--warmup_steps', type=int, default=4000, help='adam lr increases until this steps have passed')
     parser.add_argument('--model', default='model.pth', help='file to save model parameters')
+    parser.add_argument('--generate_test', action='store_true', help='only generate translated sentences')
     args = parser.parse_args()
     print(args)
 
@@ -310,6 +329,9 @@ if __name__ == '__main__':
 
     trainer = Trainer(args)
 
+    if args.generate_test:
+        trainer.generate_test()
+        sys.exit()
     # dataset = Dataset(args)
     # dataloader = DataLoader(dataset, batch_size=args.batch_size)
 
