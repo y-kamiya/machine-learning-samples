@@ -211,8 +211,9 @@ class Trainer(object):
             'optimizer_enc': self.optimizer_enc.state_dict(),
             'optimizer_dec': self.optimizer_dec.state_dict(),
         }
-        torch.save(data, self.config.model)
-        print('save model to {}'.format(self.config.model))
+        path = f'{self.config.dataroot}/{self.config.model}'
+        torch.save(data, path)
+        print(f'save model to {path}')
 
     def _get_optimizer(self, model):
         return optim.Adam(model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9)
@@ -240,11 +241,15 @@ class Trainer(object):
     def _generate(self, x):
         return F.log_softmax(self.generator(x), dim=-1)
 
-    def step(self):
+    def step(self, data):
         self.encoder.train()
         self.decoder.train()
 
-        x, y = self._get_batch()
+        if data is None:
+            x, y = self._get_batch()
+        else:
+            x = data[0]
+            y = data[1]
 
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
@@ -304,10 +309,52 @@ class Trainer(object):
             print('output: {}'.format(word_ids[i])) 
             print('') 
 
+class MTDataset(torch.utils.data.Dataset):
+    def __init__(self, config, type):
+        self.config = config
+        self.data = {} 
+
+        dataroot = config.dataroot
+        for lang in [config.src, config.tgt]:
+            path = "{}/{}.{}".format(dataroot, type, lang)
+            if not os.path.isfile(path):
+                continue
+
+            with open(path, 'r') as f:
+                lines = f.read().splitlines()
+                data = np.empty((len(lines), self.config.n_words))
+                data.fill(PAD_ID)
+                for row in range(len(lines)):
+                    line = lines[row]
+                    if not line:
+                        continue
+
+                    array = line.split(' ')
+                    word_count = len(array)
+                    assert word_count <= self.config.n_words, f'the sentence that has many words we expected. row: {row}, words: {word_count}'
+
+                    for col in range(len(array)):
+                        data[row][col] = int(array[col])
+
+            self.data[lang] = torch.from_numpy(data).to(dtype=int)
+
+    def __len__(self):
+        if self.config.src in self.data:
+            return len(self.data[self.config.src])
+
+        return 0
+
+    def __getitem__(self, idx):
+        return self.data[self.config.src][idx], self.data[self.config.tgt][idx]
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--cpu', action='store_true', help='use cpu')
+    parser.add_argument('--dataroot', default='data', help='path to data')
+    parser.add_argument('--src', default='ja', help='source language')
+    parser.add_argument('--tgt', default='en', help='target language')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
     parser.add_argument('--batch_size', type=int, default=2, help='size of batch')
     parser.add_argument('--log_interval', type=int, default=5, help='step num to display log')
@@ -334,20 +381,23 @@ if __name__ == '__main__':
         trainer.generate_test()
         sys.exit()
 
-    # dataset = Dataset(args)
-    # dataloader = DataLoader(dataset, batch_size=args.batch_size)
+    data_train = MTDataset(args, 'train')
+    dataloader = torch.utils.data.DataLoader(data_train, batch_size=args.batch_size)
 
     for epoch in range(args.epochs):
         start_time = time.time()
 
         if args.train_test:
-            for i in range(200):
+            for i in range(100):
                 trainer.step()
                 trainer.step_end(i)
+            trainer.save()
+            continue
 
-        # for step, data in enumerate(dataloader):
-            # trainer.step()
-            # trainer.step_end(i)
+        print(f'start epoch {epoch}')
+        for i, data in enumerate(dataloader):
+            trainer.step(data)
+            trainer.step_end(i)
                       
         trainer.save()
 
