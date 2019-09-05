@@ -36,7 +36,8 @@ class Generator(nn.Module):
         x = F.relu(self.batch_norm4(self.conv3(x)))
         return F.tanh(self.conv4(x))
 
-    def build_input(self, batch_size, class_labels):
+    def build_input(self, class_labels):
+        batch_size = class_labels.size(0)
         z = torch.randn(batch_size, 100, device=device)
         y = torch.zeros(batch_size, self.num_classes).scatter_(1, class_labels.view(-1, 1), 1).to(device)
         return torch.cat([z, y], dim=1)
@@ -48,7 +49,7 @@ class Discriminator(nn.Module):
         width = data.shape[2]
         height = data.shape[3]
 
-        y = torch.zeros(batch_size, args.classes, width * height)
+        y = torch.zeros(batch_size, args.classes, width * height).to(device)
         for i, num in enumerate(class_labels):
             y.data[i][num].fill_(1)
         y = y.view(-1, args.classes, width, height)
@@ -127,8 +128,8 @@ if __name__ == '__main__':
         generator.load_state_dict(torch.load(args.generator, map_location=device_name), strict=False)
 
     if args.no_training:
-        labels = torch.LongTensor([args.class_label]).repeat(args.batch_size).to(device)
-        noise = generator.build_input(args.batch_size, labels)
+        labels = torch.LongTensor([args.class_label]).repeat(args.batch_size)
+        noise = generator.build_input(labels)
         output = generator(noise)
         vutils.save_image(output, 'data/generated.png', normalize=True)
         sys.exit()
@@ -143,8 +144,8 @@ if __name__ == '__main__':
     optimizerG = optim.Adam(generator.parameters(), lr=args.learning_rate)
     optimizerD = optim.Adam(discriminator.parameters(), lr=args.learning_rate)
 
-    labels = torch.LongTensor([args.class_label]).repeat(args.batch_size).to(device)
-    fixed_noise = generator.build_input(args.batch_size, labels)
+    labels = torch.LongTensor([args.class_label]).repeat(args.batch_size)
+    fixed_noise = generator.build_input(labels)
 
     for epoch in range(1, args.epochs + 1):
         for i, (data, class_labels) in enumerate(dataloader, 0):
@@ -161,7 +162,7 @@ if __name__ == '__main__':
             loss_with_real.backward()
             D_x = output.mean().item()
 
-            generator_input = generator.build_input(args.batch_size, class_labels)
+            generator_input = generator.build_input(class_labels)
             fake_data = generator(generator_input)
             fake_data = discriminator.build_input(fake_data, class_labels)
             label.fill_(0)
@@ -182,7 +183,7 @@ if __name__ == '__main__':
             optimizerG.step()
             D_G_z2 = output.mean().item()
 
-            print("[{}/{}][{}/{}] Loss_D: {} Loss_G: {} D(x): {} D(G(x)): {} / {}".format(epoch, args.epochs, i, len(dataloader), loss_discriminator.item(), loss_generator.item(), D_x, D_G_z1, D_G_z2))
+            print("[{}/{}][{}/{}] Loss_D: {:.5f} Loss_G: {:.5f} D(x): {:.5f} D(G(x)): {:.5f} / {:.5f}".format(epoch, args.epochs, i, len(dataloader), loss_discriminator.item(), loss_generator.item(), D_x, D_G_z1, D_G_z2))
 
         if epoch % args.save_interval == 0:
             torch.save(generator.state_dict(), '{}/generator_epoch_{}.dat'.format(args.output_dir, epoch))
