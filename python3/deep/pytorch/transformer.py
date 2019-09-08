@@ -146,7 +146,7 @@ class TransformerModel(nn.Module):
 
         shape = input.size()
         source_mask_np = np.triu(np.ones(shape), k=1).astype('uint8')
-        source_mask = torch.from_numpy(source_mask_np) == 0
+        source_mask = torch.from_numpy(source_mask_np) == 1
 
         return (mask.to(device), source_mask.to(device))
 
@@ -188,13 +188,14 @@ class Trainer(object):
 
         self.criterion = nn.KLDivLoss(reduction='batchmean')
 
-        if os.path.isfile(config.model):
-            data = torch.load(config.model, map_location=config.device_name)
+        if os.path.isfile(config.model_path):
+            data = torch.load(config.model_path, map_location=config.device_name)
             self.encoder.load_state_dict(data['encoder'])
             self.decoder.load_state_dict(data['decoder'])
             self.generator.load_state_dict(data['generator'])
             self.optimizer_enc.load_state_dict(data['optimizer_enc'])
             self.optimizer_dec.load_state_dict(data['optimizer_dec'])
+            print(f'load model from {config.model_path}')
 
         self.start_time = time.time()
         self.steps = 0
@@ -212,9 +213,8 @@ class Trainer(object):
             'optimizer_enc': self.optimizer_enc.state_dict(),
             'optimizer_dec': self.optimizer_dec.state_dict(),
         }
-        path = f'{self.config.dataroot}/{self.config.model}'
-        torch.save(data, path)
-        print(f'save model to {path}')
+        torch.save(data, self.config.model_path)
+        print(f'save model to {self.config.model_path}')
 
     def _get_optimizer(self, model):
         return optim.Adam(model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9)
@@ -378,6 +378,7 @@ if __name__ == '__main__':
 
     args.device_name = device_name
     args.device = device
+    args.model_path = f'{args.dataroot}/{args.model}'
 
     trainer = Trainer(args)
 
