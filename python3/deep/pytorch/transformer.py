@@ -140,20 +140,21 @@ class TransformerModel(nn.Module):
             self.ffns.append(ResidualNormalizationWrapper(self.dim, ffn, self.dropout))
 
     def _get_mask(self, input):
-        pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input).to(torch.long)
-        mask = input == pad_tensor
+        device = self.config.device
+        pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input)
+        mask = input == pad_tensor.to(dtype=torch.long, device=device)
 
         shape = input.size()
         source_mask_np = np.triu(np.ones(shape), k=1).astype('uint8')
         source_mask = torch.from_numpy(source_mask_np) == 0
 
-        return (mask, source_mask)
+        return (mask.to(device), source_mask.to(device))
 
     def forward(self, input, src_enc=None):
         batch_size, n_sentences = input.size()
         (mask, att_mask) = self._get_mask(input)
 
-        positions = torch.arange(n_sentences).long().unsqueeze(0)
+        positions = torch.arange(n_sentences).to(dtype=torch.long, device=self.config.device).unsqueeze(0)
         x = self.token_embeddings(input)
         x = x + self.position_embeddings(positions).expand_as(x)
 
@@ -175,9 +176,9 @@ class TransformerModel(nn.Module):
 class Trainer(object):
     def __init__(self, config):
         self.config = config
-        self.encoder = TransformerModel(config, is_decoder=False)
-        self.decoder = TransformerModel(config, is_decoder=True)
-        self.generator = nn.Linear(config.dim, config.vocab_size)
+        self.encoder = TransformerModel(config, is_decoder=False).to(config.device)
+        self.decoder = TransformerModel(config, is_decoder=True).to(config.device)
+        self.generator = nn.Linear(config.dim, config.vocab_size).to(config.device)
 
         self.optimizer_enc = self._get_optimizer(self.encoder)
         self.scheduler_enc = self._get_scheduler(self.optimizer_enc)
@@ -185,10 +186,10 @@ class Trainer(object):
         self.optimizer_dec = self._get_optimizer(self.decoder)
         self.scheduler_dec = self._get_scheduler(self.optimizer_dec)
 
-        self.criterion = nn.KLDivLoss(size_average=True)
+        self.criterion = nn.KLDivLoss(reduction='batchmean')
 
         if os.path.isfile(config.model):
-            data = torch.load(config.model)
+            data = torch.load(config.model, map_location=config.device_name)
             self.encoder.load_state_dict(data['encoder'])
             self.decoder.load_state_dict(data['decoder'])
             self.generator.load_state_dict(data['generator'])
@@ -232,16 +233,16 @@ class Trainer(object):
         vocab_size = self.config.vocab_size
         batch_size = self.config.batch_size
         n_sentences = 5
-        for i in range(200):
-            data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_sentences))
-            data[:, 0] = BOS_ID
-            data = torch.from_numpy(data).requires_grad_(False)
-            return (data.clone(), data)
+
+        data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_sentences))
+        data[:, 0] = BOS_ID
+        data = torch.from_numpy(data).requires_grad_(False).to(self.config.device)
+        return (data.clone(), data)
 
     def _generate(self, x):
         return F.log_softmax(self.generator(x), dim=-1)
 
-    def step(self, data):
+    def step(self, data=None):
         self.encoder.train()
         self.decoder.train()
 
@@ -336,7 +337,7 @@ class MTDataset(torch.utils.data.Dataset):
                     for col in range(len(array)):
                         data[row][col] = int(array[col])
 
-            self.data[lang] = torch.from_numpy(data).to(dtype=int)
+            self.data[lang] = torch.from_numpy(data).to(dtype=int, device=self.config.device)
 
     def __len__(self):
         if self.config.src in self.data:
@@ -374,6 +375,9 @@ if __name__ == '__main__':
     is_cpu = args.cpu or not torch.cuda.is_available()
     device_name = "cpu" if is_cpu else "cuda:0"
     device = torch.device(device_name)
+
+    args.device_name = device_name
+    args.device = device
 
     trainer = Trainer(args)
 
