@@ -142,7 +142,7 @@ class TransformerModel(nn.Module):
     def _get_mask(self, input):
         device = self.config.device
         pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input)
-        mask = input == pad_tensor.to(dtype=torch.long, device=device)
+        mask = input == pad_tensor.to(dtype=torch.int, device=device)
 
         shape = input.size()
         source_mask_np = np.triu(np.ones(shape), k=1).astype('uint8')
@@ -155,7 +155,7 @@ class TransformerModel(nn.Module):
         (mask, att_mask) = self._get_mask(input)
 
         positions = torch.arange(n_sentences).to(dtype=torch.long, device=self.config.device).unsqueeze(0)
-        x = self.token_embeddings(input)
+        x = self.token_embeddings(input.to(dtype=int))
         x = x + self.position_embeddings(positions).expand_as(x)
 
         x = self.layer_norm_emb(x)
@@ -236,7 +236,7 @@ class Trainer(object):
 
         data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_sentences))
         data[:, 0] = BOS_ID
-        data = torch.from_numpy(data).requires_grad_(False).to(self.config.device)
+        data = torch.from_numpy(data).requires_grad_(False).to(self.config.device, dtype=torch.int)
         return (data.clone(), data)
 
     def _generate(self, x):
@@ -249,8 +249,7 @@ class Trainer(object):
         if data is None:
             x, y = self._get_batch()
         else:
-            x = data[0]
-            y = data[1]
+            (x, y) = data
 
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
@@ -258,7 +257,7 @@ class Trainer(object):
         gen_output = self._generate(dec_output)
 
         target = torch.zeros_like(gen_output)
-        target.scatter_(2, y.unsqueeze(-1), 1)
+        target.scatter_(2, y.to(dtype=torch.long).unsqueeze(-1), 1)
 
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
@@ -337,7 +336,7 @@ class MTDataset(torch.utils.data.Dataset):
                     for col in range(len(array)):
                         data[row][col] = int(array[col])
 
-            self.data[lang] = torch.from_numpy(data).to(dtype=int, device=self.config.device)
+            self.data[lang] = torch.from_numpy(data).to(dtype=torch.int)
 
     def __len__(self):
         if self.config.src in self.data:
@@ -346,7 +345,7 @@ class MTDataset(torch.utils.data.Dataset):
         return 0
 
     def __getitem__(self, idx):
-        return self.data[self.config.src][idx], self.data[self.config.tgt][idx]
+        return (self.data[self.config.src][idx], self.data[self.config.tgt][idx])
 
 
 
@@ -400,8 +399,10 @@ if __name__ == '__main__':
             continue
 
         print(f'start epoch {epoch}')
-        for i, data in enumerate(dataloader):
-            trainer.step(data)
+        for i, (x, y) in enumerate(dataloader):
+            x = x.to(device)
+            y = y.to(device)
+            trainer.step((x, y))
             trainer.step_end(i)
                       
         trainer.save()
