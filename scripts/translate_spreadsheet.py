@@ -1,4 +1,5 @@
 from __future__ import print_function
+import sys
 import pickle
 import os.path
 from googleapiclient.discovery import build
@@ -12,7 +13,7 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # The ID and range of a sample spreadsheet.
 SAMPLE_SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
-SAMPLE_RANGE_NAME = 'test!V:V'
+SAMPLE_RANGE_NAME = ['H:H', 'V:V', 'W:W']
 
 def main():
     creds = None
@@ -38,28 +39,39 @@ def main():
 
     # Call the Sheets API
     sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=SAMPLE_SPREADSHEET_ID,
-                                range=SAMPLE_RANGE_NAME).execute()
-    values = result.get('values', [])
+    result = sheet.values().batchGet(spreadsheetId=SAMPLE_SPREADSHEET_ID,
+                                ranges=SAMPLE_RANGE_NAME).execute()
 
-    if not values:
-        print('No data found.')
-    else:
-        print(values)
-        # for row in values:
-        #     # Print columns A and E, which correspond to indices 0 and 4.
-        #     print('%s, %s' % (row[0], row[4]))
+    print(result)
+    valueRanges = result.get('valueRanges', [])
+    sources = valueRanges[0].get('values', [])
+    ids = valueRanges[1].get('values', [])
+    targets = valueRanges[2].get('values', [])
 
 
 
+
+    rowIndexes = []
+    contents = []
+    for i in range(len(sources)):
+        if len(sources[i]) == 0:
+            continue
+        if i < len(targets) and len(targets[i]) != 0:
+            continue
+
+        rowIndexes.append(i+1)
+        contents.append(sources[i][0])
+
+    print(rowIndexes, contents)
+    if len(contents) == 0:
+        print('no translation text is found')
+        sys.exit()
 
     # translation api
     client = translate.TranslationServiceClient()
     project_id = 'fluid-axe-251004'
     location = 'global'
-
     parent = client.location_path(project_id, location)
-    contents = ['こんにちは', 'ありがとう']
 
     response = client.translate_text(
         parent=parent,
@@ -68,9 +80,26 @@ def main():
         source_language_code='ja-JP',
         target_language_code='en-US')
 
-    for translation in response.translations:
-        print('Translated Text: {}'.format(translation))
+    results = [entry.translated_text for entry in response.translations]
+    # results = [entry.translated_text.replace('\n', '\\n') for entry in response.translations]
+    # results = ["I can't see data even with my identification skills\\nIn strength, it is probably the 90th class ...", "Because I earn time, get away quickly!"]
+    print(results)
 
+    data = []
+    for i in range(len(results)):
+        print('row: {}, {}'.format(rowIndexes[i], results[i]))
+
+        rangeValue = 'W{}'.format(rowIndexes[i])
+        data.append({'range': rangeValue, 'values': [[results[i]]]})
+
+
+    body = {
+        'valueInputOption': 'RAW',
+        'data': data
+    }
+    print(body)
+    response = sheet.values().batchUpdate(spreadsheetId=SAMPLE_SPREADSHEET_ID, body=body).execute()
+    print(response)
 
 
 
