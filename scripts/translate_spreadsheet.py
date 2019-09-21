@@ -91,6 +91,17 @@ class SpreadSheet:
         response = self.sheet.values().batchUpdate(spreadsheetId=self.SAMPLE_SPREADSHEET_ID, body=body).execute()
         print(response)
 
+    def copy_sheet(self):
+        original_sheet_id = 0
+
+        body = {
+            'destination_spreadsheet_id': self.SAMPLE_SPREADSHEET_ID,
+        }
+
+        request = self.sheet.sheets().copyTo(spreadsheetId=self.SAMPLE_SPREADSHEET_ID, sheetId=original_sheet_id, body=body)
+        response = request.execute()
+
+        print(response)
 
 class Translation:
     def __init__(self, src_texts):
@@ -120,6 +131,8 @@ class Translation:
 
 if __name__ == '__main__':
     sheet = SpreadSheet()
+    #sheet.copy_sheet()
+
     src_texts = sheet.get_src_texts()
 
     if len(src_texts) == 0:
