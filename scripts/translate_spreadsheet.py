@@ -14,8 +14,10 @@ class SpreadSheet:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
     # The ID and range of a sample spreadsheet.
-    SAMPLE_SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
-    SAMPLE_RANGE_NAME = ['H:H', 'V:V', 'W:W']
+    START_ROW = 8001
+    SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
+    RANGE_NAME_TO_GET = [f'H{START_ROW}:H', f'V{START_ROW}:V']
+    COLUMN_NAME_TO_WRITE = 'V'
 
     def __init__(self):
         creds = self._get_creds()
@@ -51,14 +53,14 @@ class SpreadSheet:
 
     def get_src_texts(self):
         # Call the Sheets API
-        result = self.sheet.values().batchGet(spreadsheetId=self.SAMPLE_SPREADSHEET_ID,
-                                    ranges=self.SAMPLE_RANGE_NAME).execute()
+        result = self.sheet.values().batchGet(spreadsheetId=self.SPREADSHEET_ID,
+                                    ranges=self.RANGE_NAME_TO_GET).execute()
 
         print(result)
         valueRanges = result.get('valueRanges', [])
         sources = valueRanges[0].get('values', [])
-        ids = valueRanges[1].get('values', [])
-        targets = valueRanges[2].get('values', [])
+        # ids = valueRanges[1].get('values', [])
+        targets = valueRanges[1].get('values', [])
 
         for i in range(len(sources)):
             if len(sources[i]) == 0:
@@ -66,7 +68,7 @@ class SpreadSheet:
             if i < len(targets) and len(targets[i]) != 0:
                 continue
 
-            self.rowIndexes.append(i+1)
+            self.rowIndexes.append(i + self.START_ROW)
             self.contents.append(sources[i][0])
 
         print(self.rowIndexes, self.contents)
@@ -80,7 +82,7 @@ class SpreadSheet:
         for i in range(len(texts)):
             print('row: {}, {}'.format(self.rowIndexes[i], texts[i]))
 
-            rangeValue = 'W{}'.format(self.rowIndexes[i])
+            rangeValue = '{}{}'.format(self.COLUMN_NAME_TO_WRITE, self.rowIndexes[i])
             data.append({'range': rangeValue, 'values': [[texts[i]]]})
 
         body = {
@@ -88,17 +90,17 @@ class SpreadSheet:
             'data': data
         }
         print(body)
-        response = self.sheet.values().batchUpdate(spreadsheetId=self.SAMPLE_SPREADSHEET_ID, body=body).execute()
+        response = self.sheet.values().batchUpdate(spreadsheetId=self.SPREADSHEET_ID, body=body).execute()
         print(response)
 
     def copy_sheet(self):
         original_sheet_id = 0
 
         body = {
-            'destination_spreadsheet_id': self.SAMPLE_SPREADSHEET_ID,
+            'destination_spreadsheet_id': self.SPREADSHEET_ID,
         }
 
-        request = self.sheet.sheets().copyTo(spreadsheetId=self.SAMPLE_SPREADSHEET_ID, sheetId=original_sheet_id, body=body)
+        request = self.sheet.sheets().copyTo(spreadsheetId=self.SPREADSHEET_ID, sheetId=original_sheet_id, body=body)
         response = request.execute()
 
         print(response)
