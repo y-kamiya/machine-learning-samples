@@ -40,7 +40,8 @@ class SpreadSheet:
         },
     }
 
-    SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
+    # SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
+    SPREADSHEET_ID = '1e2oj9ciwCxpSKp3IupETJuukjrOmlh6MoDzkpZ2C_ow'
     SHEET_NAME = 'マスタ翻訳依頼'
 
     def __init__(self, config):
