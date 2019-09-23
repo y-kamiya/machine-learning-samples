@@ -54,6 +54,8 @@ class SpreadSheet:
         creds = self._get_creds()
         assert creds is not None, 'can not get correct credentials'
 
+        print('spreadsheet id: {}, sheet name: {}'.format(self.SPREADSHEET_ID, self.SHEET_NAME))
+
         service = build('sheets', 'v4', credentials=creds)
 
         self.config = config
@@ -70,7 +72,7 @@ class SpreadSheet:
             '{}!{}{}:{}'.format(self.SHEET_NAME, src_column, self.config.start_row, src_column),
             '{}!{}{}:{}'.format(self.SHEET_NAME, tgt_column, self.config.start_row, tgt_column),
         ]
-        print(range_name)
+        print('range: {}'.format(range_name))
 
         return range_name
 
@@ -115,7 +117,7 @@ class SpreadSheet:
             self.rowIndexes.append(i + self.config.start_row)
             self.contents.append(sources[i][0])
 
-        print(self.rowIndexes, self.contents)
+        # print(self.rowIndexes, self.contents)
 
         return self.contents
 
@@ -199,6 +201,8 @@ if __name__ == '__main__':
     parser.add_argument('--start_row', type=int, default=1, help='translate after this row index')
     parser.add_argument('--backup', action='store_true', help='copy original sheet before processed')
     args = parser.parse_args()
+
+    print('------------------------- start translation process -------------------------')
     print(args)
     
     sheet = SpreadSheet(args)
@@ -215,4 +219,5 @@ if __name__ == '__main__':
     tgt_texts = translation.get_tgt_texts()
 
     sheet.write(tgt_texts)
+    print('------------------------- end translation process -------------------------')
 
