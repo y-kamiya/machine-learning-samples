@@ -41,6 +41,7 @@ class SpreadSheet:
     }
 
     SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
+    SHEET_NAME = 'マスタ翻訳依頼'
 
     def __init__(self, config):
         src = config.src
@@ -65,8 +66,8 @@ class SpreadSheet:
         tgt_column = self.TGT_COLUMNS[self.config.src][self.config.tgt]
 
         range_name = [
-            '{}{}:{}'.format(src_column, self.config.start_row, src_column),
-            '{}{}:{}'.format(tgt_column, self.config.start_row, tgt_column),
+            '{}!{}{}:{}'.format(self.SHEET_NAME, src_column, self.config.start_row, src_column),
+            '{}!{}{}:{}'.format(self.SHEET_NAME, tgt_column, self.config.start_row, tgt_column),
         ]
         print(range_name)
 
@@ -127,7 +128,7 @@ class SpreadSheet:
         for i in range(len(texts)):
             print('row: {}, {}'.format(self.rowIndexes[i], texts[i]))
 
-            rangeValue = '{}{}'.format(self.TGT_COLUMNS[src][tgt], self.rowIndexes[i])
+            rangeValue = '{}!{}{}'.format(self.SHEET_NAME, self.TGT_COLUMNS[src][tgt], self.rowIndexes[i])
             data.append({'range': rangeValue, 'values': [[texts[i]]]})
 
         body = {
