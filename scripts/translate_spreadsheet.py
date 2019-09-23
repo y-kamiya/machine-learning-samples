@@ -2,6 +2,7 @@ from __future__ import print_function
 import sys
 import pickle
 import os.path
+import argparse
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -13,21 +14,63 @@ class SpreadSheet:
     # If modifying these scopes, delete the file token.pickle.
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-    # The ID and range of a sample spreadsheet.
-    START_ROW = 8001
-    SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
-    RANGE_NAME_TO_GET = [f'H{START_ROW}:H', f'V{START_ROW}:V']
-    COLUMN_NAME_TO_WRITE = 'V'
+    SRC_COLUMNS = {
+        'ja': 'H',
+        'en': 'M',
+        'fr': 'N',
+        'de': 'O',
+        'es': 'P',
+        'tc': 'Q',
+        'kr': 'R',
+    }
+    TGT_COLUMNS = {
+        'ja': {
+            'en': 'V',
+            'fr': 'W',
+            'de': 'Y',
+            'es': 'AA',
+            'tc': 'AC',
+            'kr': 'AE',
+        },
+        'en': {
+            'fr': 'X',
+            'de': 'Z',
+            'es': 'AB',
+            'tc': 'AD',
+        },
+    }
 
-    def __init__(self):
+    SPREADSHEET_ID = '1YC03OZZ5e3F8MWz6gyAzxfZevyOJy0lBDo_Smn94gHk'
+
+    def __init__(self, config):
+        src = config.src
+        tgt = config.tgt
+        assert src in self.SRC_COLUMNS, 'src language is not supported'
+        assert src in self.TGT_COLUMNS, 'src language is not supported'
+        assert tgt in self.TGT_COLUMNS[src], 'tgt language is not supported'
+
         creds = self._get_creds()
         assert creds is not None, 'can not get correct credentials'
 
         service = build('sheets', 'v4', credentials=creds)
 
+        self.config = config
         self.sheet = service.spreadsheets()
         self.rowIndexes = []
         self.contents = []
+
+
+    def _build_range_name_to_get(self):
+        src_column = self.SRC_COLUMNS[self.config.src]
+        tgt_column = self.TGT_COLUMNS[self.config.src][self.config.tgt]
+
+        range_name = [
+            '{}{}:{}'.format(src_column, self.config.start_row, src_column),
+            '{}{}:{}'.format(tgt_column, self.config.start_row, tgt_column),
+        ]
+        print(range_name)
+
+        return range_name
 
     def _get_creds(self):
         creds = None
@@ -54,12 +97,11 @@ class SpreadSheet:
     def get_src_texts(self):
         # Call the Sheets API
         result = self.sheet.values().batchGet(spreadsheetId=self.SPREADSHEET_ID,
-                                    ranges=self.RANGE_NAME_TO_GET).execute()
+                                    ranges=self._build_range_name_to_get()).execute()
 
-        print(result)
+        # print(result)
         valueRanges = result.get('valueRanges', [])
         sources = valueRanges[0].get('values', [])
-        # ids = valueRanges[1].get('values', [])
         targets = valueRanges[1].get('values', [])
 
         for i in range(len(sources)):
@@ -68,7 +110,7 @@ class SpreadSheet:
             if i < len(targets) and len(targets[i]) != 0:
                 continue
 
-            self.rowIndexes.append(i + self.START_ROW)
+            self.rowIndexes.append(i + self.config.start_row)
             self.contents.append(sources[i][0])
 
         print(self.rowIndexes, self.contents)
@@ -78,11 +120,14 @@ class SpreadSheet:
     def write(self, texts):
         assert len(self.rowIndexes) == len(texts), "translated texts should be same length with row indexes"
 
+        src = self.config.src
+        tgt = self.config.tgt
+
         data = []
         for i in range(len(texts)):
             print('row: {}, {}'.format(self.rowIndexes[i], texts[i]))
 
-            rangeValue = '{}{}'.format(self.COLUMN_NAME_TO_WRITE, self.rowIndexes[i])
+            rangeValue = '{}{}'.format(self.TGT_COLUMNS[src][tgt], self.rowIndexes[i])
             data.append({'range': rangeValue, 'values': [[texts[i]]]})
 
         body = {
@@ -106,7 +151,21 @@ class SpreadSheet:
         print(response)
 
 class Translation:
-    def __init__(self, src_texts):
+    LANG_CODE_MAP = {
+        'ja': 'ja',
+        'en': 'en',
+        'fr': 'fr',
+        'de': 'de',
+        'es': 'es',
+        'tc': 'zh-TW',
+        'kr': 'ko',
+    }
+
+    def __init__(self, config, src_texts):
+        assert config.src in self.LANG_CODE_MAP, 'src language is not supported'
+        assert config.tgt in self.LANG_CODE_MAP, 'tgt language is not supported'
+
+        self.config = config
         self.src_texts = src_texts
 
     def get_tgt_texts(self):
@@ -120,20 +179,29 @@ class Translation:
             parent=parent,
             contents=self.src_texts,
             mime_type='text/plain',  # mime types: text/plain, text/html
-            source_language_code='ja-JP',
-            target_language_code='en-US')
+            source_language_code=self.LANG_CODE_MAP[self.config.src],
+            target_language_code=self.LANG_CODE_MAP[self.config.tgt])
 
         results = [entry.translated_text for entry in response.translations]
         # results = [entry.translated_text.replace('\n', '\\n') for entry in response.translations]
         # results = ["I can't see data even with my identification skills\\nIn strength, it is probably the 90th class ...", "Because I earn time, get away quickly!"]
-        print(results)
+        # print(results)
 
         return results
 
 
 if __name__ == '__main__':
-    sheet = SpreadSheet()
-    #sheet.copy_sheet()
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('--src', default='ja', help='src language code')
+    parser.add_argument('--tgt', default='en', help='tgt language code')
+    parser.add_argument('--start_row', type=int, default=1, help='translate after this row index')
+    parser.add_argument('--backup', action='store_true', help='copy original sheet before processed')
+    args = parser.parse_args()
+    print(args)
+    
+    sheet = SpreadSheet(args)
+    if (args.backup):
+        sheet.copy_sheet()
 
     src_texts = sheet.get_src_texts()
 
@@ -141,7 +209,7 @@ if __name__ == '__main__':
         print('no translation text is found')
         sys.exit()
 
-    translation = Translation(src_texts)
+    translation = Translation(args, src_texts)
     tgt_texts = translation.get_tgt_texts()
 
     sheet.write(tgt_texts)
