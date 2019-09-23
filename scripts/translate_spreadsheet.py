@@ -219,5 +219,4 @@ if __name__ == '__main__':
     tgt_texts = translation.get_tgt_texts()
 
     sheet.write(tgt_texts)
-    print('------------------------- end translation process -------------------------')
 
