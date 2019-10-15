@@ -280,8 +280,8 @@ class Trainer(object):
         self.scheduler_dec.step()
 
     def _print_log(self):
-        # if self.steps % args.log_interval != 0:
-            # return
+        if self.steps % args.log_interval != 0:
+            return
 
         current_time = time.time()
         elapsed_time = current_time - self.start_time
