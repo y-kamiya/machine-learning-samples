@@ -186,7 +186,7 @@ class Trainer(object):
         self.optimizer_dec = self._get_optimizer(self.decoder)
         self.scheduler_dec = self._get_scheduler(self.optimizer_dec)
 
-        self.criterion = nn.KLDivLoss(reduction='batchmean')
+        self.criterion = LabelSmoothing(config.vocab_size, 0.1).to(config.device)
 
         if os.path.isfile(config.model_path):
             data = torch.load(config.model_path, map_location=config.device_name)
@@ -256,13 +256,12 @@ class Trainer(object):
 
         gen_output = self._generate(dec_output)
 
-        target = torch.zeros_like(gen_output)
-        target.scatter_(2, y.to(dtype=torch.long).unsqueeze(-1), 1)
-
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
 
-        loss = self.criterion(gen_output, target)
+        nwords = (y != PAD_ID).sum().item()
+
+        loss = self.criterion(gen_output, y, nwords)
         loss.backward()
 
         self.optimizer_enc.step()
@@ -270,7 +269,7 @@ class Trainer(object):
 
         self.stats['loss'] = loss.item()
         self.stats['sentences'] += x.size(0)
-        self.stats['words'] += (y != PAD_ID).sum().item()
+        self.stats['words'] += nwords
 
     def step_end(self, step):
         self.steps += 1
@@ -308,6 +307,28 @@ class Trainer(object):
             print('input : {}'.format(x[i]))
             print('output: {}'.format(word_ids[i])) 
             print('') 
+
+class LabelSmoothing(nn.Module):
+    def __init__(self, size, smoothing):
+        super(LabelSmoothing, self).__init__()
+        self.criterion = nn.KLDivLoss(reduction='sum')
+        self.smoothing = smoothing
+        self.size = size
+
+    def forward(self, x, target, nwords):
+        x = x.contiguous().view(-1, self.size)
+        target = target.contiguous().view(-1)
+
+        true_dist = x.data.clone()
+        true_dist.fill_(self.smoothing / (self.size - 2))
+        true_dist.scatter_(1, target.unsqueeze(1).to(dtype=torch.long), 1.0 - self.smoothing)
+        true_dist[:, PAD_ID] = 0
+
+        mask = torch.nonzero(target.data == PAD_ID)
+        if mask.dim() > 0:
+            true_dist.index_fill_(0, mask.squeeze(), 0.0)
+
+        return self.criterion(x, true_dist.requires_grad_(False)) / nwords
 
 class MTDataset(torch.utils.data.Dataset):
     def __init__(self, config, type):
