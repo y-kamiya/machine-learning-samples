@@ -15,28 +15,28 @@ class SpreadSheet:
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
     SRC_COLUMNS = {
-        'ja': 'H',
-        'en': 'M',
-        'fr': 'N',
-        'de': 'O',
-        'es': 'P',
-        'tc': 'Q',
-        'kr': 'R',
+        'ja': 'G',
+        'en': 'L',
+        'fr': 'M',
+        'de': 'N',
+        'es': 'O',
+        'tc': 'P',
+        'kr': 'Q',
     }
     TGT_COLUMNS = {
         'ja': {
-            'en': 'V',
+            'en': 'U',
+            'fr': 'V',
+            'de': 'X',
+            'es': 'Z',
+            'tc': 'AB',
+            'kr': 'AD',
+        },
+        'en': {
             'fr': 'W',
             'de': 'Y',
             'es': 'AA',
             'tc': 'AC',
-            'kr': 'AE',
-        },
-        'en': {
-            'fr': 'X',
-            'de': 'Z',
-            'es': 'AB',
-            'tc': 'AD',
         },
     }
 
