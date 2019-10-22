@@ -1,13 +1,16 @@
 from __future__ import print_function
 import argparse
+import sys
 import os
+import pickle
+import numpy as np
 import torch
 import torch.utils.data
 from torch import nn, optim
 from torch.nn import functional as F
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
-
+from PIL import Image
 
 parser = argparse.ArgumentParser(description='VAE MNIST Example')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
@@ -22,6 +25,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--dataroot', default='./data',
                     help='where the data directory exists')
+parser.add_argument('--latent-feature', default='',
+                    help='image file path to get latent feature')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -34,10 +39,10 @@ train_loader = torch.utils.data.DataLoader(
     datasets.MNIST(args.dataroot, train=True, download=True,
                    transform=transforms.ToTensor()),
     batch_size=args.batch_size, shuffle=True, **kwargs)
+
 test_loader = torch.utils.data.DataLoader(
     datasets.MNIST(args.dataroot, train=False, transform=transforms.ToTensor()),
     batch_size=args.batch_size, shuffle=True, **kwargs)
-
 
 class VAE(nn.Module):
     def __init__(self):
@@ -66,6 +71,10 @@ class VAE(nn.Module):
         mu, logvar = self.encode(x.view(-1, 784))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
+
+    def latent_feature(self, x):
+        mu, logvar = self.encode(x.view(-1, 784))
+        return self.reparameterize(mu, logvar)
 
 model = VAE().to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -104,6 +113,10 @@ def train(epoch):
     print('====> Epoch: {} Average loss: {:.4f}'.format(
           epoch, train_loss / len(train_loader.dataset)))
 
+    model_dir = '{}/model'.format(args.output_dir)
+    os.makedirs(model_dir, exist_ok=True)
+    torch.save(model.state_dict(), '{}/epoch{}.pth'.format(model_dir, epoch))
+
 
 def test(epoch):
     model.eval()
@@ -123,9 +136,38 @@ def test(epoch):
     test_loss /= len(test_loader.dataset)
     print('====> Test set loss: {:.4f}'.format(test_loss))
 
+def latent_feature():
+    model.eval()
+    with torch.no_grad():
+        pickle_path = '{}/latent_feature.pickle'.format(args.output_dir)
+        data = []
+        if os.path.exists(pickle_path):
+            with open(pickle_path, 'rb') as fp:
+                data = pickle.load(fp)
+
+        array = args.latent_feature.split('.')
+        label = array[0]
+
+        image = Image.open(args.latent_feature)
+        x = transforms.functional.to_tensor(image).unsqueeze(0).to(device)
+
+        z = model.latent_feature(x)
+        data.append({
+            'path': args.latent_feature,
+            'label': label,
+            'feature': z,
+        })
+
+        with open(pickle_path, 'wb') as fp:
+            pickle.dump(data, fp)
+
 if __name__ == "__main__":
     args.output_dir = '{}/vae'.format(args.dataroot)
     os.makedirs(args.output_dir, exist_ok=True)
+
+    if args.latent_feature:
+        latent_feature()
+        sys.exit()
 
     for epoch in range(1, args.epochs + 1):
         train(epoch)
