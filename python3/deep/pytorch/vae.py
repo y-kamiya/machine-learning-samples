@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 from PIL import Image
+import tabulate
 
 parser = argparse.ArgumentParser(description='VAE MNIST Example')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
@@ -23,16 +24,21 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
+parser.add_argument('--model', default=None,
+                    help='model path to load')
 parser.add_argument('--dataroot', default='./data',
                     help='where the data directory exists')
 parser.add_argument('--latent-feature', default='',
                     help='image file path to get latent feature')
+parser.add_argument('--analyze', action='store_true',
+                    help='compare cosine similarity of images')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 torch.manual_seed(args.seed)
 
-device = torch.device("cuda" if args.cuda else "cpu")
+device_name = "cuda" if args.cuda else "cpu"
+device = torch.device(device_name)
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 train_loader = torch.utils.data.DataLoader(
@@ -77,6 +83,9 @@ class VAE(nn.Module):
         return self.reparameterize(mu, logvar)
 
 model = VAE().to(device)
+if args.model != None:
+    model.load_state_dict(torch.load(args.model, map_location=device_name), strict=False)
+
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 
@@ -145,13 +154,13 @@ def latent_feature():
             with open(pickle_path, 'rb') as fp:
                 data = pickle.load(fp)
 
-        array = args.latent_feature.split('.')
-        label = array[0]
+        filename = args.latent_feature.split('/')[-1]
+        label = filename.split('.')[0]
 
-        image = Image.open(args.latent_feature)
+        image = Image.open('{}/{}'.format(args.dataroot, args.latent_feature))
         x = transforms.functional.to_tensor(image).unsqueeze(0).to(device)
 
-        z = model.latent_feature(x)
+        z = model.latent_feature(x).squeeze()
         data.append({
             'path': args.latent_feature,
             'label': label,
@@ -161,12 +170,45 @@ def latent_feature():
         with open(pickle_path, 'wb') as fp:
             pickle.dump(data, fp)
 
+def cos_sim(v1, v2):
+    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+def img_tag(src):
+    path = os.path.abspath('{}/{}'.format(args.dataroot, src))
+    return '<img src="{}" width="50" height="50">'.format(path)
+
+def analyze():
+    pickle_path = '{}/latent_feature.pickle'.format(args.output_dir)
+    if os.path.exists(pickle_path):
+        with open(pickle_path, 'rb') as fp:
+            data = pickle.load(fp)
+
+    table = []
+    for row in data:
+        d = []
+        for col in data:
+            d.append(cos_sim(row['feature'].numpy(), col['feature'].numpy()))
+        table.append(d)
+
+    for i in range(len(data)):
+        table[i].insert(0, img_tag(data[i]['path']))
+
+    headers = [img_tag(entry['path']) for entry in data]
+    headers.insert(0, "")
+
+    html = tabulate.tabulate(table, headers, tablefmt='html', floatfmt='.3f', numalign='right')
+    print(html)
+
 if __name__ == "__main__":
     args.output_dir = '{}/vae'.format(args.dataroot)
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.latent_feature:
         latent_feature()
+        sys.exit()
+
+    if args.analyze:
+        analyze()
         sys.exit()
 
     for epoch in range(1, args.epochs + 1):
