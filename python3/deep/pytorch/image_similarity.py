@@ -45,11 +45,37 @@ class VAE(nn.Module):
         mu, logvar = self.encode(x.view(-1, 784))
         return self.reparameterize(mu, logvar)
 
+class AE(nn.Module):
+    def __init__(self):
+        super(AE, self).__init__()
+
+        self.fc1 = nn.Linear(784, 400)
+        self.fc2 = nn.Linear(400, 20)
+        self.fc3 = nn.Linear(20, 400)
+        self.fc4 = nn.Linear(400, 784)
+
+    def encode(self, x):
+        h = F.relu(self.fc1(x))
+        return self.fc2(h), None
+
+    def decode(self, z):
+        h = F.relu(self.fc3(z))
+        return torch.sigmoid(self.fc4(h))
+
+    def forward(self, x):
+        z, _ = self.encode(x.view(-1, 784))
+        return self.decode(z), None, None
+
+    def latent_feature(self, x):
+        z, _ = self.encode(x.view(-1, 784))
+        return z
+
+
 class Trainer():
     def __init__(self, config):
         self.config = config
 
-        self.model = VAE().to(config.device)
+        self.model = self.__create_model()
         if config.model != None:
             self.model.load_state_dict(torch.load(config.model, map_location=config.device_name), strict=False)
 
@@ -66,15 +92,23 @@ class Trainer():
             datasets.MNIST(config.dataroot, train=False, transform=transforms.ToTensor()),
             batch_size=config.batch_size, shuffle=True, **kwargs)
 
+    def __create_model(self):
+        if self.config.model_type == 'vae':
+            return VAE().to(self.config.device)
+
+        return AE().to(self.config.device)
+
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
         BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        KLD = 0
+        if mu != None and logvar != None:
+            # see Appendix B from VAE paper:
+            # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+            # https://arxiv.org/abs/1312.6114
+            # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+            KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
         return BCE + KLD
 
@@ -195,10 +229,14 @@ if __name__ == "__main__":
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--model-type', default='ae',
+                        help='model type')
     parser.add_argument('--model', default=None,
                         help='model path to load')
     parser.add_argument('--dataroot', default='./data',
                         help='where the data directory exists')
+    parser.add_argument('--output-dir-name', default=None,
+                        help='output directory name')
     parser.add_argument('--latent-feature', default='',
                         help='image file path to get latent feature')
     parser.add_argument('--analyze', action='store_true',
@@ -206,9 +244,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-    args.output_dir = '{}/image_similarity'.format(args.dataroot)
     args.device_name = "cuda" if args.cuda else "cpu"
     args.device = torch.device(args.device_name)
+
+    args.output_dir = '{}/image_similarity'.format(args.dataroot)
+    if args.output_dir_name != None:
+        args.output_dir = '{}/{}'.format(args.output_dir, args.output_dir_name)
 
     os.makedirs(args.output_dir, exist_ok=True)
 
