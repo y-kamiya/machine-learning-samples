@@ -12,15 +12,16 @@ from torchvision import datasets, transforms
 from torchvision.utils import save_image
 from PIL import Image
 import tabulate
+import matplotlib.pyplot as plt
 
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, dim):
         super(VAE, self).__init__()
 
         self.fc1 = nn.Linear(784, 400)
-        self.fc21 = nn.Linear(400, 20)
-        self.fc22 = nn.Linear(400, 20)
-        self.fc3 = nn.Linear(20, 400)
+        self.fc21 = nn.Linear(400, dim)
+        self.fc22 = nn.Linear(400, dim)
+        self.fc3 = nn.Linear(dim, 400)
         self.fc4 = nn.Linear(400, 784)
 
     def encode(self, x):
@@ -46,12 +47,12 @@ class VAE(nn.Module):
         return self.reparameterize(mu, logvar)
 
 class AE(nn.Module):
-    def __init__(self):
+    def __init__(self, dim):
         super(AE, self).__init__()
 
         self.fc1 = nn.Linear(784, 400)
-        self.fc2 = nn.Linear(400, 20)
-        self.fc3 = nn.Linear(20, 400)
+        self.fc2 = nn.Linear(400, dim)
+        self.fc3 = nn.Linear(dim, 400)
         self.fc4 = nn.Linear(400, 784)
 
     def encode(self, x):
@@ -93,10 +94,12 @@ class Trainer():
             batch_size=config.batch_size, shuffle=True, **kwargs)
 
     def __create_model(self):
+        dim = self.config.dim
+        device = self.config.device
         if self.config.model_type == 'vae':
-            return VAE().to(self.config.device)
+            return VAE(dim).to(device)
 
-        return AE().to(self.config.device)
+        return AE(dim).to(device)
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
@@ -212,15 +215,45 @@ class Trainer():
 
     def sample_image(self):
         with torch.no_grad():
-            sample = torch.randn(64, 20).to(self.config.device)
+            sample = torch.randn(64, self.config.dim).to(self.config.device)
             sample = self.model.decode(sample).cpu()
             output_file = '{}/sample_{}.png'.format(self.config.output_dir, str(epoch))
             save_image(sample.view(64, 1, 28, 28), output_file)
+
+    def plot(self):
+        assert self.config.dim == 2, 'dimension of latent feature is wrong. use --dim 2'
+        assert self.config.batch_size == 1, 'batch_size should be 1 to plot'
+
+        self.model.eval()
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+        plotData = {}
+        with torch.no_grad():
+            for i, (data, label) in enumerate(self.test_loader):
+                if i == 1000:
+                    break
+                data = data.to(self.config.device)
+                z = self.model.latent_feature(data).squeeze()
+
+                label = label.item()
+                if label not in plotData:
+                    plotData[label] = {'x':[], 'y':[]}
+
+                plotData[label]['x'].append(z[0].item())
+                plotData[label]['y'].append(z[1].item())
+
+        for label, item in sorted(plotData.items(), key=lambda x:x[0]):
+            plt.scatter(item['x'], item['y'], c=colors[label], label=label)
+
+        plt.legend()
+        plt.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                         help='input batch size for training (default: 128)')
+    parser.add_argument('--dim', type=int, default=20, metavar='N',
+                        help='dimension of latent feature vector')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -241,6 +274,8 @@ if __name__ == "__main__":
                         help='image file path to get latent feature')
     parser.add_argument('--analyze', action='store_true',
                         help='compare cosine similarity of images')
+    parser.add_argument('--plot', action='store_true',
+                        help='plot latent features as 2-dimensional graph')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -263,6 +298,10 @@ if __name__ == "__main__":
 
     if args.analyze:
         trainer.analyze()
+        sys.exit()
+
+    if args.plot:
+        trainer.plot()
         sys.exit()
 
     for epoch in range(1, args.epochs + 1):
