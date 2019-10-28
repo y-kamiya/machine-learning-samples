@@ -6,7 +6,7 @@ import pickle
 import numpy as np
 import torch
 import torch.utils.data
-from torch import nn, optim
+from torch import optim
 from torch.nn import functional as F
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
@@ -14,63 +14,7 @@ from PIL import Image
 import tabulate
 import matplotlib.pyplot as plt
 
-class VAE(nn.Module):
-    def __init__(self, dim):
-        super(VAE, self).__init__()
-
-        self.fc1 = nn.Linear(784, 400)
-        self.fc21 = nn.Linear(400, dim)
-        self.fc22 = nn.Linear(400, dim)
-        self.fc3 = nn.Linear(dim, 400)
-        self.fc4 = nn.Linear(400, 784)
-
-    def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn_like(std)
-        return mu + eps*std
-
-    def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))
-
-    def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 784))
-        z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
-
-    def latent_feature(self, x):
-        mu, logvar = self.encode(x.view(-1, 784))
-        return self.reparameterize(mu, logvar)
-
-class AE(nn.Module):
-    def __init__(self, dim):
-        super(AE, self).__init__()
-
-        self.fc1 = nn.Linear(784, 400)
-        self.fc2 = nn.Linear(400, dim)
-        self.fc3 = nn.Linear(dim, 400)
-        self.fc4 = nn.Linear(400, 784)
-
-    def encode(self, x):
-        h = F.relu(self.fc1(x))
-        return self.fc2(h), None
-
-    def decode(self, z):
-        h = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h))
-
-    def forward(self, x):
-        z, _ = self.encode(x.view(-1, 784))
-        return self.decode(z), None, None
-
-    def latent_feature(self, x):
-        z, _ = self.encode(x.view(-1, 784))
-        return z
-
+import model
 
 class Trainer():
     def __init__(self, config):
@@ -94,16 +38,18 @@ class Trainer():
             batch_size=config.batch_size, shuffle=True, **kwargs)
 
     def __create_model(self):
-        dim = self.config.dim
         device = self.config.device
         if self.config.model_type == 'vae':
-            return VAE(dim).to(device)
+            return model.VAE(self.config).to(device)
 
-        return AE(dim).to(device)
+        if self.config.model_type == 'ae_cnn':
+            return model.AE_CNN(self.config).to(device)
+
+        return model.AE(self.config).to(device)
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x.view(-1, 784), x.view(-1, 784), reduction='sum')
 
         KLD = 0
         if mu != None and logvar != None:
@@ -274,6 +220,8 @@ if __name__ == "__main__":
                         help='image file path to get latent feature')
     parser.add_argument('--analyze', action='store_true',
                         help='compare cosine similarity of images')
+    parser.add_argument('--channel-size', type=int, default=1,
+                        help='input and output channel size')
     parser.add_argument('--plot', action='store_true',
                         help='plot latent features as 2-dimensional graph')
     args = parser.parse_args()
