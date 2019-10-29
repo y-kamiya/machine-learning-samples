@@ -128,7 +128,7 @@ class AE_CNN(Base):
         dim = 2 * input_shape[-1]
         indices = torch.arange(0, dim*dim, step=kernel_size)
         indices = indices.view(dim, -1)[0::2]
-        return indices.expand(input_shape)
+        return indices.expand(input_shape).to(self.config.device)
 
     def forward(self, x):
         z, _ = self.encode(x)
