@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import sys
 import os
+import time
 import pickle
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ import model
 class Trainer():
     def __init__(self, config):
         self.config = config
+        self.start_time = time.time()
 
         self.model = self.__create_model()
         if config.model != None:
@@ -63,6 +65,8 @@ class Trainer():
 
 
     def train(self, epoch):
+        start_time = time.time()
+
         self.model.train()
         train_loss = 0
         for batch_idx, (data, _) in enumerate(self.train_loader):
@@ -79,13 +83,13 @@ class Trainer():
                     100. * batch_idx / len(self.train_loader),
                     loss.item() / len(data)))
 
-        print('====> Epoch: {} Average loss: {:.4f}'.format(
-              epoch, train_loss / len(self.train_loader.dataset)))
+        time_epoch = time.time() - start_time
+        time_all = time.time() - self.start_time
+        print('====> Epoch: {} Average loss: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
+              epoch, train_loss / len(self.train_loader.dataset), time_epoch, time_all))
 
-        model_dir = '{}/model'.format(self.config.output_dir)
-        os.makedirs(model_dir, exist_ok=True)
-        torch.save(self.model.state_dict(), '{}/epoch{}.pth'.format(model_dir, epoch))
-
+        if epoch % self.config.save_interval == 0:
+            self.save_model()
 
     def test(self, epoch):
         self.model.eval()
@@ -95,7 +99,7 @@ class Trainer():
                 data = data.to(self.config.device)
                 recon_batch, mu, logvar = self.model(data)
                 test_loss += self.__loss_function(recon_batch, data, mu, logvar).item()
-                if i == 0:
+                if i == 0 and epoch % self.config.save_interval == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
                                           recon_batch.view(self.config.batch_size, 1, 28, 28)[:n]])
@@ -159,12 +163,20 @@ class Trainer():
         html = tabulate.tabulate(table, headers, tablefmt='html', floatfmt='.3f', numalign='right')
         print(html)
 
-    def sample_image(self):
+    def sample_image(self, epoch):
         with torch.no_grad():
             sample = torch.randn(64, self.config.dim).to(self.config.device)
             sample = self.model.decode(sample).cpu()
             output_file = '{}/sample_{}.png'.format(self.config.output_dir, str(epoch))
             save_image(sample.view(64, 1, 28, 28), output_file)
+            print('save image to {}'.format(output_file))
+
+    def save_model(self):
+        model_dir = '{}/model'.format(self.config.output_dir)
+        os.makedirs(model_dir, exist_ok=True)
+        model_path = '{}/epoch{}.pth'.format(model_dir, epoch)
+        torch.save(self.model.state_dict(), model_path)
+        print('save model to {}'.format(model_path))
 
     def plot(self):
         assert self.config.dim == 2, 'dimension of latent feature is wrong. use --dim 2'
@@ -198,6 +210,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                         help='input batch size for training (default: 128)')
+    parser.add_argument('--channel-size', type=int, default=1,
+                        help='input and output channel size')
     parser.add_argument('--dim', type=int, default=20, metavar='N',
                         help='dimension of latent feature vector')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -208,6 +222,8 @@ if __name__ == "__main__":
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--save-interval', type=int, default=5, metavar='N',
+                        help='how many epochs to save model and sample image')
     parser.add_argument('--model-type', default='ae',
                         help='model type')
     parser.add_argument('--model', default=None,
@@ -220,8 +236,6 @@ if __name__ == "__main__":
                         help='image file path to get latent feature')
     parser.add_argument('--analyze', action='store_true',
                         help='compare cosine similarity of images')
-    parser.add_argument('--channel-size', type=int, default=1,
-                        help='input and output channel size')
     parser.add_argument('--plot', action='store_true',
                         help='plot latent features as 2-dimensional graph')
     args = parser.parse_args()
@@ -259,4 +273,6 @@ if __name__ == "__main__":
     for epoch in range(1, args.epochs + 1):
         trainer.train(epoch)
         trainer.test(epoch)
-        trainer.sample_image()
+
+        if epoch % args.save_interval == 0:
+            trainer.sample_image(epoch)
