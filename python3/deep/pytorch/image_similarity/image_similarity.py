@@ -234,6 +234,10 @@ if __name__ == "__main__":
     if args.output_dir_name != None:
         args.output_dir = '{}/{}'.format(args.output_dir, args.output_dir_name)
 
+    if args.plot:
+        args.dim = 2
+        args.batch_size = 1
+
     os.makedirs(args.output_dir, exist_ok=True)
 
     torch.manual_seed(args.seed)
