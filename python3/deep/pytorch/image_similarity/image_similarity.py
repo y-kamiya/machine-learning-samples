@@ -14,6 +14,7 @@ from torchvision.utils import save_image
 from PIL import Image
 import tabulate
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 
 import model
 
@@ -192,19 +193,37 @@ class Trainer():
         torch.save(self.model.state_dict(), model_path)
         print('save model to {}'.format(model_path))
 
+    def __plot_with_sne(self):
+        plotData = {'data':[], 'label':[]}
+        with torch.no_grad():
+            for i, (data, label) in enumerate(self.test_loader):
+                if i == 1000:
+                    break
+                z = self.model.latent_feature(data).squeeze()
+
+                plotData['data'].append(z.numpy())
+                plotData['label'].append(label.item())
+
+        reduced = TSNE(n_components=2, random_state=0).fit_transform(plotData['data'])
+
+        plt.scatter(reduced[:, 0], reduced[:, 1], c=plotData['label'], alpha=0.5, cmap='rainbow')
+        plt.colorbar()
+        plt.show()
+
     def plot(self):
-        assert self.config.dim == 2, 'dimension of latent feature is wrong. use --dim 2'
         assert self.config.batch_size == 1, 'batch_size should be 1 to plot'
 
         self.model.eval()
-        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+        if self.config.dim != 2:
+            self.__plot_with_sne()
+            return
 
         plotData = {}
         with torch.no_grad():
             for i, (data, label) in enumerate(self.test_loader):
                 if i == 1000:
                     break
-                data = data.to(self.config.device)
                 z = self.model.latent_feature(data).squeeze()
 
                 label = label.item()
@@ -215,7 +234,7 @@ class Trainer():
                 plotData[label]['y'].append(z[1].item())
 
         for label, item in sorted(plotData.items(), key=lambda x:x[0]):
-            plt.scatter(item['x'], item['y'], c=colors[label], label=label)
+            plt.scatter(item['x'], item['y'], label=label, alpha=0.5)
 
         plt.legend()
         plt.show()
@@ -263,7 +282,6 @@ if __name__ == "__main__":
         args.output_dir = '{}/{}'.format(args.output_dir, args.output_dir_name)
 
     if args.plot:
-        args.dim = 2
         args.batch_size = 1
 
     os.makedirs(args.output_dir, exist_ok=True)
