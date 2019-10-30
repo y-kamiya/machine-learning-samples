@@ -63,30 +63,38 @@ class Trainer():
 
         return BCE + KLD
 
+    def __loss_mse(self, recon_x, x):
+        return F.mse_loss(recon_x.view(-1, 784), x.view(-1, 784), reduction='sum')
 
     def train(self, epoch):
         start_time = time.time()
 
         self.model.train()
+        n_dataset = len(self.train_loader.dataset)
         train_loss = 0
+        train_loss_mse = 0
         for batch_idx, (data, _) in enumerate(self.train_loader):
             data = data.to(self.config.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
+
             loss = self.__loss_function(recon_batch, data, mu, logvar)
-            loss.backward()
+            loss_mse = self.__loss_mse(recon_batch, data)
+            (loss + loss_mse).backward()
             train_loss += loss.item()
+            train_loss_mse += loss_mse.item()
+
             self.optimizer.step()
             if batch_idx % self.config.log_interval == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(self.train_loader.dataset),
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tLoss MSE: {:.6f}'.format(
+                    epoch, batch_idx * len(data), n_dataset,
                     100. * batch_idx / len(self.train_loader),
-                    loss.item() / len(data)))
+                    loss.item() / len(data), loss_mse.item() / len(data)))
 
         time_epoch = time.time() - start_time
         time_all = time.time() - self.start_time
-        print('====> Epoch: {} Average loss: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
-              epoch, train_loss / len(self.train_loader.dataset), time_epoch, time_all))
+        print('====> Epoch: {} Average loss: {:.4f}\tAverage loss MSE: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
+              epoch, train_loss / n_dataset, train_loss_mse / n_dataset, time_epoch, time_all))
 
         if epoch % self.config.save_interval == 0:
             self.save_model()
@@ -94,11 +102,15 @@ class Trainer():
     def test(self, epoch):
         self.model.eval()
         test_loss = 0
+        test_loss_mse = 0
         with torch.no_grad():
             for i, (data, _) in enumerate(self.test_loader):
                 data = data.to(self.config.device)
                 recon_batch, mu, logvar = self.model(data)
+
                 test_loss += self.__loss_function(recon_batch, data, mu, logvar).item()
+                test_loss_mse += self.__loss_mse(recon_batch, data).item()
+
                 if i == 0 and epoch % self.config.save_interval == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
@@ -106,8 +118,10 @@ class Trainer():
                     output_file = '{}/reconstruction_{}.png'.format(self.config.output_dir, str(epoch))
                     save_image(comparison.cpu(), output_file, nrow=n)
 
-        test_loss /= len(self.test_loader.dataset)
-        print('====> Test set loss: {:.4f}'.format(test_loss))
+        n_dataset = len(self.test_loader.dataset)
+        test_loss /= n_dataset
+        test_loss_mse /= n_dataset
+        print('====> Test set loss: {:.4f}\tMSE: {:.4f}'.format(test_loss, test_loss_mse))
 
     def latent_feature(self):
         self.model.eval()
