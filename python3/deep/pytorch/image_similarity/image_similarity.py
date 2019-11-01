@@ -15,6 +15,7 @@ from PIL import Image
 import tabulate
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from torch.utils.tensorboard import SummaryWriter
 
 import model
 
@@ -22,6 +23,7 @@ class Trainer():
     def __init__(self, config):
         self.config = config
         self.start_time = time.time()
+        self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
 
         self.model = self.__create_model()
         if config.model != None:
@@ -96,6 +98,8 @@ class Trainer():
         time_all = time.time() - self.start_time
         print('====> Epoch: {} Average loss: {:.4f}\tAverage loss MSE: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
               epoch, train_loss / n_dataset, train_loss_mse / n_dataset, time_epoch, time_all))
+        self.writer.add_scalar('LossBCE/train', loss, epoch, time_all)
+        self.writer.add_scalar('LossMSE/train', loss_mse, epoch, time_all)
 
         if epoch % self.config.save_interval == 0:
             self.save_model()
@@ -123,6 +127,8 @@ class Trainer():
         test_loss /= n_dataset
         test_loss_mse /= n_dataset
         print('====> Test set loss: {:.4f}\tMSE: {:.4f}'.format(test_loss, test_loss_mse))
+        self.writer.add_scalar('LossBCE/test', test_loss, epoch)
+        self.writer.add_scalar('LossMSE/test', test_loss_mse, epoch)
 
     def latent_feature(self):
         self.model.eval()
@@ -277,9 +283,13 @@ if __name__ == "__main__":
     args.device_name = "cuda" if args.cuda else "cpu"
     args.device = torch.device(args.device_name)
 
-    args.output_dir = '{}/image_similarity'.format(args.dataroot)
-    if args.output_dir_name != None:
-        args.output_dir = '{}/{}'.format(args.output_dir, args.output_dir_name)
+    if args.output_dir_name == None:
+        args.output_dir_name = '{}_dim{}'.format(args.model_type, args.dim)
+
+    args.output_dir = '{}/image_similarity/{}'.format(args.dataroot, args.output_dir_name)
+    args.tensorboard_log_dir = '{}/runs/{}'.format(args.dataroot, args.output_dir_name)
+
+    assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
 
     if args.plot:
         args.batch_size = 1
