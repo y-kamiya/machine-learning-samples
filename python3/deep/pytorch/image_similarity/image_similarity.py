@@ -286,8 +286,8 @@ if __name__ == "__main__":
     if args.output_dir_name == None:
         args.output_dir_name = '{}_dim{}'.format(args.model_type, args.dim)
 
-    args.output_dir = '{}/image_similarity/{}'.format(args.dataroot, args.output_dir_name)
-    args.tensorboard_log_dir = '{}/runs/{}'.format(args.dataroot, args.output_dir_name)
+    args.output_dir = '{}/output/{}'.format(args.dataroot, args.output_dir_name)
+    args.tensorboard_log_dir = '{}/output/runs/{}'.format(args.dataroot, args.output_dir_name)
 
     assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
 
