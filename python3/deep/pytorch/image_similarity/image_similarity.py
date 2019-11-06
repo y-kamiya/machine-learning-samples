@@ -87,7 +87,7 @@ class Trainer():
         if config.model != None:
             self.model.load_state_dict(torch.load(config.model, map_location=config.device_name), strict=False)
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=config.lr)
 
         self.train_loader = self.__create_loader('train')
         self.test_loader = self.__create_loader('test')
@@ -121,7 +121,7 @@ class Trainer():
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
         dim = self.config.crop_height * self.config.crop_width
-        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
 
         KLD = 0
         if mu != None and logvar != None:
@@ -135,7 +135,7 @@ class Trainer():
 
     def __loss_mse(self, recon_x, x):
         dim = self.config.crop_height * self.config.crop_width
-        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
+        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
 
     def train(self, epoch):
         start_time = time.time()
@@ -323,6 +323,7 @@ if __name__ == "__main__":
     parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate of optimizer')
     parser.add_argument('--save-interval', type=int, default=5, metavar='N', help='how many epochs to save model and sample image')
     parser.add_argument('--model-type', default='ae', help='model type')
     parser.add_argument('--model', default=None, help='model path to load')
