@@ -138,5 +138,92 @@ class AE_CNN(Base):
         z, _ = self.encode(x)
         return z
 
+class AE_VGG(Base):
+    def __init__(self, config):
+        super(AE_VGG, self).__init__()
+
+        self.config = config
+        dim = config.dim
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(config.channel_size, 16, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
+            nn.MaxPool2d(2),
+        )
+
+        hidden_dim = 1024
+        self.fcEnc1 = nn.Linear(28 * 128, hidden_dim)
+        self.fcEnc2 = nn.Linear(hidden_dim, dim)
+
+        self.fcDec2 = nn.Linear(dim, hidden_dim)
+        self.fcDec1 = nn.Linear(hidden_dim, 28 * 128)
+        self.deconv5a = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
+        self.deconv5b = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
+        self.deconv5c = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
+        self.deconv4a = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
+        self.deconv4b = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
+        self.deconv4c = nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1)
+        self.deconv3a = nn.ConvTranspose2d(64, 64, kernel_size=3, padding=1)
+        self.deconv3b = nn.ConvTranspose2d(64, 64, kernel_size=3, padding=1)
+        self.deconv3c = nn.ConvTranspose2d(64, 32, kernel_size=3, padding=1)
+        self.deconv2a = nn.ConvTranspose2d(32, 32, kernel_size=3, padding=1)
+        self.deconv2b = nn.ConvTranspose2d(32, 16, kernel_size=3, padding=1)
+        self.deconv1a = nn.ConvTranspose2d(16, 16, kernel_size=3, padding=1)
+        self.deconv1b = nn.ConvTranspose2d(16, self.config.channel_size, kernel_size=3, padding=1)
+
+    def encode(self, x):
+        batch_size = x.shape[0]
+        x = self.encoder(x)
+        x = F.relu(self.fcEnc1(x.view(batch_size, -1)))
+        x = self.fcEnc2(x)
+        return x, None
+
+    def decode(self, z):
+        batch_size = z.shape[0]
+        x = F.relu(self.fcDec2(z))
+        x = F.relu(self.fcDec1(x))
+        x = x.view(batch_size, 128, 7, 4)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.deconv5c(self.deconv5b(self.deconv5a(x)))
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.deconv4c(self.deconv4b(self.deconv4a(x)))
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.deconv3c(self.deconv3b(self.deconv3a(x)))
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.deconv2b(self.deconv2a(x))
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.deconv1b(self.deconv1a(x))
+        return torch.sigmoid(x)
+
+    def __unpool_indices(self, kernel_size, input_shape):
+        w = kernel_size * input_shape[-1]
+        h = kernel_size * input_shape[-2]
+        indices = torch.arange(0, w*h, step=kernel_size)
+        indices = indices.view(h, -1)[0::kernel_size]
+        return indices.expand(input_shape).to(self.config.device)
+
+    def forward(self, x):
+        z, _ = self.encode(x)
+        return self.decode(z), None, None
+
+    def latent_feature(self, x):
+        z, _ = self.encode(x)
+        return z
+
 
 

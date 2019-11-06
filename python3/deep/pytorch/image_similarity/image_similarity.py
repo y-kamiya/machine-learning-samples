@@ -3,21 +3,78 @@ import argparse
 import sys
 import os
 import time
+import random
 import pickle
 import numpy as np
 import torch
 import torch.utils.data
 from torch import optim
 from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 from PIL import Image
 import tabulate
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
-from torch.utils.tensorboard import SummaryWriter
 
 import model
+
+class MyDataset(Dataset):
+    IMG_EXTENSIONS = ['.png']
+
+    def __init__(self, config, phase):
+        self.config = config
+
+        dir = os.path.join(config.dataroot, phase)
+        self.images = sorted(self.__make_dataset(dir))
+
+    @classmethod
+    def is_image_file(self, fname):
+        return any(fname.endswith(ext) for ext in self.IMG_EXTENSIONS)
+
+    @classmethod
+    def __make_dataset(self, dir):
+        images = []
+        assert os.path.isdir(dir), '%s is not a valid directory' % dir
+
+        for root, _, fnames in sorted(os.walk(dir)):
+            for fname in fnames:
+                if self.is_image_file(fname):
+                    path = os.path.join(root, fname)
+                    images.append(path)
+        return images
+
+    def __transform(self, param):
+        list = []
+
+        (x, y) = param['crop_pos']
+        crop_width = self.config.crop_width
+        crop_height = self.config.crop_height
+        list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
+
+        list += [transforms.ToTensor(),
+                 transforms.Normalize((0.5,), (0.5,))]
+
+        return transforms.Compose(list)
+
+    def __transform_param(self, image):
+        load_w, load_h = image.size
+        x = random.randint(0, np.maximum(0, load_w - self.config.crop_width))
+        y = random.randint(0, np.maximum(0, load_h - self.config.crop_height))
+
+        return {'crop_pos': (x, y)}
+
+    def __getitem__(self, index):
+        image = Image.open(self.images[index])
+
+        param = self.__transform_param(image)
+        transform = self.__transform(param)
+        return transform(image)
+
+    def __len__(self):
+        return len(self.images)
 
 class Trainer():
     def __init__(self, config):
@@ -31,16 +88,21 @@ class Trainer():
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
-        kwargs = {'num_workers': 1, 'pin_memory': True} if config.cuda else {}
+        self.train_loader = self.__create_loader('train')
+        self.test_loader = self.__create_loader('test')
 
-        self.train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(config.dataroot, train=True, download=True,
-                           transform=transforms.ToTensor()),
-            batch_size=config.batch_size, shuffle=True, **kwargs)
+    def __create_loader(self, phase):
+        config = self.config
+        if config.use_mnist:
+            is_train = True if phase == 'train' else False
+            kwargs = {'num_workers': 1, 'pin_memory': True} if config.cuda else {}
+            return torch.utils.data.DataLoader(
+                datasets.MNIST(config.dataroot, train=is_train, download=True,
+                               transform=transforms.ToTensor()),
+                batch_size=config.batch_size, shuffle=True, **kwargs)
 
-        self.test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(config.dataroot, train=False, transform=transforms.ToTensor()),
-            batch_size=config.batch_size, shuffle=True, **kwargs)
+        dataset = MyDataset(self.config, phase)
+        return DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
 
     def __create_model(self):
         device = self.config.device
@@ -49,6 +111,9 @@ class Trainer():
 
         if self.config.model_type == 'ae_cnn':
             return model.AE_CNN(self.config).to(device)
+
+        if self.config.model_type == 'ae_vgg':
+            return model.AE_VGG(self.config).to(device)
 
         return model.AE(self.config).to(device)
 
@@ -76,7 +141,7 @@ class Trainer():
         n_dataset = len(self.train_loader.dataset)
         train_loss = 0
         train_loss_mse = 0
-        for batch_idx, (data, _) in enumerate(self.train_loader):
+        for batch_idx, data in enumerate(self.train_loader):
             data = data.to(self.config.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
@@ -109,7 +174,7 @@ class Trainer():
         test_loss = 0
         test_loss_mse = 0
         with torch.no_grad():
-            for i, (data, _) in enumerate(self.test_loader):
+            for i, data in enumerate(self.test_loader):
                 data = data.to(self.config.device)
                 recon_batch, mu, logvar = self.model(data)
 
@@ -247,36 +312,24 @@ class Trainer():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
-    parser.add_argument('--batch-size', type=int, default=128, metavar='N',
-                        help='input batch size for training (default: 128)')
-    parser.add_argument('--channel-size', type=int, default=1,
-                        help='input and output channel size')
-    parser.add_argument('--dim', type=int, default=20, metavar='N',
-                        help='dimension of latent feature vector')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                        help='number of epochs to train (default: 10)')
-    parser.add_argument('--no-cuda', action='store_true', default=False,
-                        help='enables CUDA training')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
-                        help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
-    parser.add_argument('--save-interval', type=int, default=5, metavar='N',
-                        help='how many epochs to save model and sample image')
-    parser.add_argument('--model-type', default='ae',
-                        help='model type')
-    parser.add_argument('--model', default=None,
-                        help='model path to load')
-    parser.add_argument('--dataroot', default='./data',
-                        help='where the data directory exists')
-    parser.add_argument('--output-dir-name', default=None,
-                        help='output directory name')
-    parser.add_argument('--latent-feature', default='',
-                        help='image file path to get latent feature')
-    parser.add_argument('--analyze', action='store_true',
-                        help='compare cosine similarity of images')
-    parser.add_argument('--plot', action='store_true',
-                        help='plot latent features as 2-dimensional graph')
+    parser.add_argument('--batch-size', type=int, default=128, metavar='N', help='input batch size for training (default: 128)')
+    parser.add_argument('--channel-size', type=int, default=1, help='input and output channel size')
+    parser.add_argument('--dim', type=int, default=20, metavar='N', help='dimension of latent feature vector')
+    parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs to train (default: 10)')
+    parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
+    parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+    parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
+    parser.add_argument('--save-interval', type=int, default=5, metavar='N', help='how many epochs to save model and sample image')
+    parser.add_argument('--model-type', default='ae', help='model type')
+    parser.add_argument('--model', default=None, help='model path to load')
+    parser.add_argument('--dataroot', default='./data', help='where the data directory exists')
+    parser.add_argument('--output-dir-name', default=None, help='output directory name')
+    parser.add_argument('--crop-width', type=int, default=224, help='crop size')
+    parser.add_argument('--crop-height', type=int, default=128, help='crop size')
+    parser.add_argument('--latent-feature', default='', help='image file path to get latent feature')
+    parser.add_argument('--analyze', action='store_true', help='compare cosine similarity of images')
+    parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
+    parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
