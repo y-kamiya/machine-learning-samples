@@ -49,10 +49,11 @@ class MyDataset(Dataset):
     def __transform(self, param):
         list = []
 
-        (x, y) = param['crop_pos']
-        crop_width = self.config.crop_width
-        crop_height = self.config.crop_height
-        list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
+        if self.config.crop_height != 0:
+            (x, y) = param['crop_pos']
+            crop_width = self.config.crop_width
+            crop_height = self.config.crop_height
+            list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
 
         list += [transforms.ToTensor(),
                  transforms.Normalize((0.5,), (0.5,))]
@@ -119,7 +120,8 @@ class Trainer():
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
-        BCE = F.binary_cross_entropy(recon_x.view(-1, 784), x.view(-1, 784), reduction='sum')
+        dim = self.config.crop_height * self.config.crop_width
+        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
         KLD = 0
         if mu != None and logvar != None:
@@ -132,7 +134,8 @@ class Trainer():
         return BCE + KLD
 
     def __loss_mse(self, recon_x, x):
-        return F.mse_loss(recon_x.view(-1, 784), x.view(-1, 784), reduction='sum')
+        dim = self.config.crop_height * self.config.crop_width
+        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
     def train(self, epoch):
         start_time = time.time()
@@ -184,7 +187,8 @@ class Trainer():
                 if i == 0 and epoch % self.config.save_interval == 0:
                     n = min(data.size(0), 8)
                     comparison = torch.cat([data[:n],
-                                          recon_batch.view(self.config.batch_size, 1, 28, 28)[:n]])
+                                          recon_batch.view(-1, self.config.channel_size,
+                                                           self.config.crop_height, self.config.crop_width)[:n]])
                     output_file = '{}/reconstruction_{}.png'.format(self.config.output_dir, str(epoch))
                     save_image(comparison.cpu(), output_file, nrow=n)
 
@@ -251,10 +255,10 @@ class Trainer():
 
     def sample_image(self, epoch):
         with torch.no_grad():
-            sample = torch.randn(64, self.config.dim).to(self.config.device)
+            sample = torch.randn(16, self.config.dim).to(self.config.device)
             sample = self.model.decode(sample).cpu()
             output_file = '{}/sample_{}.png'.format(self.config.output_dir, str(epoch))
-            save_image(sample.view(64, 1, 28, 28), output_file)
+            save_image(sample.view(16, self.config.channel_size, self.config.crop_height, self.config.crop_width), output_file)
             print('save image to {}'.format(output_file))
 
     def save_model(self):
@@ -324,8 +328,8 @@ if __name__ == "__main__":
     parser.add_argument('--model', default=None, help='model path to load')
     parser.add_argument('--dataroot', default='./data', help='where the data directory exists')
     parser.add_argument('--output-dir-name', default=None, help='output directory name')
-    parser.add_argument('--crop-width', type=int, default=224, help='crop size')
-    parser.add_argument('--crop-height', type=int, default=128, help='crop size')
+    parser.add_argument('--crop-width', type=int, default=0, help='crop size')
+    parser.add_argument('--crop-height', type=int, default=0, help='crop size, 0 means no crop')
     parser.add_argument('--latent-feature', default='', help='image file path to get latent feature')
     parser.add_argument('--analyze', action='store_true', help='compare cosine similarity of images')
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
@@ -342,7 +346,7 @@ if __name__ == "__main__":
     args.output_dir = '{}/output/{}'.format(args.dataroot, args.output_dir_name)
     args.tensorboard_log_dir = '{}/output/runs/{}'.format(args.dataroot, args.output_dir_name)
 
-    assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
+    # assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
 
     if args.plot:
         args.batch_size = 1
