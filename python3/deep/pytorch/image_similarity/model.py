@@ -1,3 +1,4 @@
+import math
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -166,12 +167,14 @@ class AE_VGG(Base):
             nn.MaxPool2d(2),
         )
 
+        h, w = self.__enc_output_dim()
+        enc_output_dim = h * w
         hidden_dim = 1024
-        self.fcEnc1 = nn.Linear(28 * 128, hidden_dim)
+        self.fcEnc1 = nn.Linear(enc_output_dim * 128, hidden_dim)
         self.fcEnc2 = nn.Linear(hidden_dim, dim)
 
         self.fcDec2 = nn.Linear(dim, hidden_dim)
-        self.fcDec1 = nn.Linear(hidden_dim, 28 * 128)
+        self.fcDec1 = nn.Linear(hidden_dim, enc_output_dim * 128)
         self.deconv5a = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
         self.deconv5b = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
         self.deconv5c = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
@@ -186,6 +189,16 @@ class AE_VGG(Base):
         self.deconv1a = nn.ConvTranspose2d(16, 16, kernel_size=3, padding=1)
         self.deconv1b = nn.ConvTranspose2d(16, self.config.channel_size, kernel_size=3, padding=1)
 
+    def __enc_output_dim(self):
+        w = self.config.crop_width
+        h = self.config.crop_height
+
+        for i in range(5):
+            w = math.floor((w - 1 - 1) / 2 + 1)
+            h = math.floor((h - 1 - 1) / 2 + 1)
+
+        return (h, w)
+
     def encode(self, x):
         batch_size = x.shape[0]
         x = self.encoder(x)
@@ -195,17 +208,18 @@ class AE_VGG(Base):
 
     def decode(self, z):
         batch_size = z.shape[0]
+        h, w = self.__enc_output_dim()
         x = F.relu(self.fcDec2(z))
         x = F.relu(self.fcDec1(x))
-        x = x.view(batch_size, 128, 7, 4)
+        x = x.view(batch_size, 128, w, h)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = self.deconv5c(self.deconv5b(self.deconv5a(x)))
+        x = F.relu(self.deconv5c(self.deconv5b(self.deconv5a(x))))
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = self.deconv4c(self.deconv4b(self.deconv4a(x)))
+        x = F.relu(self.deconv4c(self.deconv4b(self.deconv4a(x))))
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = self.deconv3c(self.deconv3b(self.deconv3a(x)))
+        x = F.relu(self.deconv3c(self.deconv3b(self.deconv3a(x))))
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = self.deconv2b(self.deconv2a(x))
+        x = F.relu(self.deconv2b(self.deconv2a(x)))
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
         x = self.deconv1b(self.deconv1a(x))
         return torch.sigmoid(x)

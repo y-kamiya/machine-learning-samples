@@ -24,11 +24,15 @@ import model
 class MyDataset(Dataset):
     IMG_EXTENSIONS = ['.png']
 
-    def __init__(self, config, phase):
+    def __init__(self, config, phase=None, path=None):
         self.config = config
 
-        dir = os.path.join(config.dataroot, phase)
-        self.images = sorted(self.__make_dataset(dir))
+        if phase != None:
+            dir = os.path.join(config.dataroot, phase)
+            self.images = sorted(self.__make_dataset(dir))
+
+        if path != None:
+            self.images = [path]
 
     @classmethod
     def is_image_file(self, fname):
@@ -49,11 +53,10 @@ class MyDataset(Dataset):
     def __transform(self, param):
         list = []
 
-        if self.config.crop_height != 0:
-            (x, y) = param['crop_pos']
-            crop_width = self.config.crop_width
-            crop_height = self.config.crop_height
-            list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
+        (x, y) = param['crop_pos']
+        crop_width = self.config.crop_width
+        crop_height = self.config.crop_height
+        list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
 
         list += [transforms.ToTensor(),
                  transforms.Normalize((0.5,), (0.5,))]
@@ -68,11 +71,14 @@ class MyDataset(Dataset):
         return {'crop_pos': (x, y)}
 
     def __getitem__(self, index):
-        image = Image.open(self.images[index])
+        path = self.images[index]
+        image = Image.open(path)
 
         param = self.__transform_param(image)
         transform = self.__transform(param)
-        return transform(image)
+
+        label = os.path.basename(path).split('_')[0]
+        return (transform(image), label)
 
     def __len__(self):
         return len(self.images)
@@ -94,16 +100,20 @@ class Trainer():
 
     def __create_loader(self, phase):
         config = self.config
-        if config.use_mnist:
-            is_train = True if phase == 'train' else False
-            kwargs = {'num_workers': 1, 'pin_memory': True} if config.cuda else {}
-            return torch.utils.data.DataLoader(
-                datasets.MNIST(config.dataroot, train=is_train, download=True,
-                               transform=transforms.ToTensor()),
-                batch_size=config.batch_size, shuffle=True, **kwargs)
+        if not config.use_mnist:
+            dataset = MyDataset(self.config, phase)
+            return DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
 
-        dataset = MyDataset(self.config, phase)
-        return DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
+        is_train = True if phase == 'train' else False
+        kwargs = {'num_workers': 1, 'pin_memory': True} if config.cuda else {}
+
+        list = [
+            transforms.Resize((config.crop_width, config.crop_height)),
+            transforms.ToTensor(),
+        ]
+        return torch.utils.data.DataLoader(
+            datasets.MNIST(config.dataroot, train=is_train, download=True, transform=transforms.Compose(list)),
+            batch_size=config.batch_size, shuffle=True, **kwargs)
 
     def __create_model(self):
         device = self.config.device
@@ -121,7 +131,7 @@ class Trainer():
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
         dim = self.config.crop_height * self.config.crop_width
-        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
+        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
         KLD = 0
         if mu != None and logvar != None:
@@ -135,7 +145,7 @@ class Trainer():
 
     def __loss_mse(self, recon_x, x):
         dim = self.config.crop_height * self.config.crop_width
-        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
+        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
     def train(self, epoch):
         start_time = time.time()
@@ -144,7 +154,7 @@ class Trainer():
         n_dataset = len(self.train_loader.dataset)
         train_loss = 0
         train_loss_mse = 0
-        for batch_idx, data in enumerate(self.train_loader):
+        for batch_idx, (data, _) in enumerate(self.train_loader):
             data = data.to(self.config.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
@@ -177,7 +187,7 @@ class Trainer():
         test_loss = 0
         test_loss_mse = 0
         with torch.no_grad():
-            for i, data in enumerate(self.test_loader):
+            for i, (data, _) in enumerate(self.test_loader):
                 data = data.to(self.config.device)
                 recon_batch, mu, logvar = self.model(data)
 
@@ -211,8 +221,12 @@ class Trainer():
             filename = self.config.latent_feature.split('/')[-1]
             label = filename.split('.')[0]
 
-            image = Image.open('{}/{}'.format(self.config.dataroot, self.config.latent_feature))
-            x = transforms.functional.to_tensor(image).unsqueeze(0).to(self.config.device)
+            # image = Image.open('{}/{}'.format(self.config.dataroot, self.config.latent_feature))
+            path = '{}/{}'.format(self.config.dataroot, self.config.latent_feature)
+            dataset = MyDataset(self.config, None, path)
+            loader = DataLoader(dataset, batch_size=1)
+
+            _, (x, _) = next(enumerate(loader))
 
             z = self.model.latent_feature(x).squeeze()
             data.append({
@@ -277,11 +291,12 @@ class Trainer():
                 z = self.model.latent_feature(data).squeeze()
 
                 plotData['data'].append(z.numpy())
-                plotData['label'].append(label.item())
+                # plotData['label'].append(label.item())
 
         reduced = TSNE(n_components=2, random_state=0).fit_transform(plotData['data'])
 
-        plt.scatter(reduced[:, 0], reduced[:, 1], c=plotData['label'], alpha=0.5, cmap='rainbow')
+        plt.scatter(reduced[:, 0], reduced[:, 1], alpha=0.5, cmap='rainbow')
+        # plt.scatter(reduced[:, 0], reduced[:, 1], c=plotData['label'], alpha=0.5, cmap='rainbow')
         plt.colorbar()
         plt.show()
 
@@ -348,6 +363,11 @@ if __name__ == "__main__":
     args.tensorboard_log_dir = '{}/output/runs/{}'.format(args.dataroot, args.output_dir_name)
 
     # assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
+
+    if args.use_mnist:
+        args.crop_height = args.crop_width = 28
+        if args.model_type == 'ae_vgg':
+            args.crop_height = args.crop_width = 32
 
     if args.plot:
         args.batch_size = 1
