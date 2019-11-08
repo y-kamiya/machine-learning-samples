@@ -184,6 +184,7 @@ class AE_VGG(Base):
         for i in range(n_layers):
             n_filters = input if i == 0 else output
             layers.append(nn.Conv2d(n_filters, output, kernel_size=3, padding=1))
+            layers.append(nn.BatchNorm2d(output))
             layers.append(nn.ReLU(True))
 
         layers.append(nn.MaxPool2d(2))
@@ -195,6 +196,7 @@ class AE_VGG(Base):
         for i in range(n_layers):
             n_filters = input if i != (n_layers - 1) else output
             layers.append(nn.ConvTranspose2d(input, n_filters, kernel_size=3, padding=1))
+            layers.append(nn.BatchNorm2d(n_filters))
             if activation:
                 layers.append(nn.ReLU(True))
 
