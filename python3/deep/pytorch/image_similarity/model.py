@@ -147,24 +147,11 @@ class AE_VGG(Base):
         dim = config.dim
 
         self.encoder = nn.Sequential(
-            nn.Conv2d(config.channel_size, 16, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(16, 16, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(32, 32, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.ReLU(True),
-            nn.MaxPool2d(2),
+            self.__up(config.channel_size, 16, 2),
+            self.__up(16, 32, 2),
+            self.__up(32, 64, 3),
+            self.__up(64, 128, 3),
+            self.__up(128, 128, 3),
         )
 
         h, w = self.__enc_output_dim()
@@ -175,19 +162,12 @@ class AE_VGG(Base):
 
         self.fcDec2 = nn.Linear(dim, hidden_dim)
         self.fcDec1 = nn.Linear(hidden_dim, enc_output_dim * 128)
-        self.deconv5a = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
-        self.deconv5b = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
-        self.deconv5c = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
-        self.deconv4a = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
-        self.deconv4b = nn.ConvTranspose2d(128, 128, kernel_size=3, padding=1)
-        self.deconv4c = nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1)
-        self.deconv3a = nn.ConvTranspose2d(64, 64, kernel_size=3, padding=1)
-        self.deconv3b = nn.ConvTranspose2d(64, 64, kernel_size=3, padding=1)
-        self.deconv3c = nn.ConvTranspose2d(64, 32, kernel_size=3, padding=1)
-        self.deconv2a = nn.ConvTranspose2d(32, 32, kernel_size=3, padding=1)
-        self.deconv2b = nn.ConvTranspose2d(32, 16, kernel_size=3, padding=1)
-        self.deconv1a = nn.ConvTranspose2d(16, 16, kernel_size=3, padding=1)
-        self.deconv1b = nn.ConvTranspose2d(16, self.config.channel_size, kernel_size=3, padding=1)
+
+        self.down5 = self.__down(128, 128, 3)
+        self.down4 = self.__down(128, 64, 3)
+        self.down3 = self.__down(64, 32, 3)
+        self.down2 = self.__down(32, 16, 2)
+        self.down1 = self.__down(16, config.channel_size, 2, False)
 
     def __enc_output_dim(self):
         w = self.config.crop_width
@@ -198,6 +178,27 @@ class AE_VGG(Base):
             h = math.floor((h - 1 - 1) / 2 + 1)
 
         return (h, w)
+
+    def __up(self, input, output, n_layers):
+        layers = []
+        for i in range(n_layers):
+            n_filters = input if i == 0 else output
+            layers.append(nn.Conv2d(n_filters, output, kernel_size=3, padding=1))
+            layers.append(nn.ReLU(True))
+
+        layers.append(nn.MaxPool2d(2))
+
+        return nn.Sequential(*layers)
+
+    def __down(self, input, output, n_layers, activation=True):
+        layers = []
+        for i in range(n_layers):
+            n_filters = input if i != (n_layers - 1) else output
+            layers.append(nn.ConvTranspose2d(input, n_filters, kernel_size=3, padding=1))
+            if activation:
+                layers.append(nn.ReLU(True))
+
+        return nn.Sequential(*layers)
 
     def encode(self, x):
         batch_size = x.shape[0]
@@ -213,15 +214,15 @@ class AE_VGG(Base):
         x = F.relu(self.fcDec1(x))
         x = x.view(batch_size, 128, w, h)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = F.relu(self.deconv5c(self.deconv5b(self.deconv5a(x))))
+        x = self.down5(x)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = F.relu(self.deconv4c(self.deconv4b(self.deconv4a(x))))
+        x = self.down4(x)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = F.relu(self.deconv3c(self.deconv3b(self.deconv3a(x))))
+        x = self.down3(x)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = F.relu(self.deconv2b(self.deconv2a(x)))
+        x = self.down2(x)
         x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
-        x = self.deconv1b(self.deconv1a(x))
+        x = self.down1(x)
         return torch.sigmoid(x)
 
     def __unpool_indices(self, kernel_size, input_shape):
