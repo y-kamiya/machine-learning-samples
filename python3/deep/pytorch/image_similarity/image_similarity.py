@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from torch import optim
+from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -90,6 +91,7 @@ class Trainer():
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
 
         self.model = self.__create_model()
+        self.model.apply(self.__weights_init)
         if config.model != None:
             self.model.load_state_dict(torch.load(config.model, map_location=config.device_name), strict=False)
 
@@ -121,12 +123,26 @@ class Trainer():
             return model.VAE(self.config).to(device)
 
         if self.config.model_type == 'ae_cnn':
+            if use_mnist:
+                return model.AE_CNN_MNIST(self.config).to(device)
             return model.AE_CNN(self.config).to(device)
 
         if self.config.model_type == 'ae_vgg':
             return model.AE_VGG(self.config).to(device)
 
         return model.AE(self.config).to(device)
+
+    def __weights_init(self, m):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            nn.init.kaiming_normal_(m.weight)
+            m.bias.data.fill_(0)
+        elif classname.find('Linear') != -1:
+            nn.init.kaiming_normal_(m.weight)
+            m.bias.data.fill_(0)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.normal_(1.0, 0.02)
+            m.bias.data.fill_(0)
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
