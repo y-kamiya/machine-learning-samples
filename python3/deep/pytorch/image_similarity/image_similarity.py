@@ -59,8 +59,9 @@ class MyDataset(Dataset):
         crop_height = self.config.crop_height
         list.append(transforms.Lambda(lambda img: img.crop((x, y, x + crop_width, y + crop_height))))
 
-        list += [transforms.ToTensor(),
-                 transforms.Normalize((0.5,), (0.5,))]
+        list += [transforms.ToTensor()]
+        # list += [transforms.ToTensor(),
+        #          transforms.Normalize((0.5,), (0.5,))]
 
         return transforms.Compose(list)
 
@@ -147,7 +148,7 @@ class Trainer():
     # Reconstruction + KL divergence losses summed over all elements and batch
     def __loss_function(self, recon_x, x, mu, logvar):
         dim = self.config.crop_height * self.config.crop_width
-        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
 
         KLD = 0
         if mu != None and logvar != None:
@@ -161,7 +162,7 @@ class Trainer():
 
     def __loss_mse(self, recon_x, x):
         dim = self.config.crop_height * self.config.crop_width
-        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
+        return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='mean')
 
     def train(self, epoch):
         start_time = time.time()
