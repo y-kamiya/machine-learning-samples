@@ -80,9 +80,9 @@ class AE(Base):
         z, _ = self.encode(x.view(-1, 784))
         return z
 
-class AE_CNN(Base):
+class AE_CNN_MNIST(Base):
     def __init__(self, config):
-        super(AE_CNN, self).__init__()
+        super(AE_CNN_MNIST, self).__init__()
 
         self.config = config
         dim = config.dim

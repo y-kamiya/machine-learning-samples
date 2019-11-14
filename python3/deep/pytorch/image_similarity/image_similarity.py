@@ -54,6 +54,9 @@ class MyDataset(Dataset):
     def __transform(self, param):
         list = []
 
+        # list.append(transforms.Grayscale())
+        # list.append(transforms.Resize((144, 256)))
+
         (x, y) = param['crop_pos']
         crop_width = self.config.crop_width
         crop_height = self.config.crop_height
@@ -124,7 +127,7 @@ class Trainer():
             return model.VAE(self.config).to(device)
 
         if self.config.model_type == 'ae_cnn':
-            if use_mnist:
+            if self.config.use_mnist:
                 return model.AE_CNN_MNIST(self.config).to(device)
             return model.AE_CNN(self.config).to(device)
 
@@ -239,7 +242,7 @@ class Trainer():
             label = filename.split('.')[0]
 
             # image = Image.open('{}/{}'.format(self.config.dataroot, self.config.latent_feature))
-            path = '{}/{}'.format(self.config.dataroot, self.config.latent_feature)
+            path = '{}'.format(self.config.latent_feature)
             dataset = MyDataset(self.config, None, path)
             loader = DataLoader(dataset, batch_size=1)
 
@@ -259,7 +262,7 @@ class Trainer():
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
     def __img_tag(self, src):
-        path = os.path.abspath('{}/{}'.format(self.config.dataroot, src))
+        path = os.path.abspath('{}'.format(src))
         return '<img src="{}" width="50" height="50">'.format(path)
 
     def analyze(self):
