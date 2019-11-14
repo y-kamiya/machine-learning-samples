@@ -30,7 +30,7 @@ class MyDataset(Dataset):
 
         if phase != None:
             dir = os.path.join(config.dataroot, phase)
-            self.images = sorted(self.__make_dataset(dir))
+            self.images, self.labels = self.__make_dataset(dir)
 
         if path != None:
             self.images = [path]
@@ -41,15 +41,23 @@ class MyDataset(Dataset):
 
     @classmethod
     def __make_dataset(self, dir):
-        images = []
         assert os.path.isdir(dir), '%s is not a valid directory' % dir
+        images = []
+        labels = []
+        self.label_map = {}
 
         for root, _, fnames in sorted(os.walk(dir)):
             for fname in fnames:
                 if self.is_image_file(fname):
                     path = os.path.join(root, fname)
                     images.append(path)
-        return images
+
+                    label_str = fname.split('_')[0]
+                    if label_str not in self.label_map:
+                        self.label_map[label_str] = len(self.label_map)
+                    labels.append(self.label_map[label_str])
+
+        return images, labels
 
     def __transform(self, param):
         list = []
@@ -82,8 +90,7 @@ class MyDataset(Dataset):
         param = self.__transform_param(image)
         transform = self.__transform(param)
 
-        label = os.path.basename(path).split('_')[0]
-        return (transform(image), label)
+        return (transform(image), self.labels[index])
 
     def __len__(self):
         return len(self.images)
@@ -311,13 +318,24 @@ class Trainer():
                 z = self.model.latent_feature(data).squeeze()
 
                 plotData['data'].append(z.numpy())
-                # plotData['label'].append(label.item())
+                plotData['label'].append(label.item())
 
         reduced = TSNE(n_components=2, random_state=0).fit_transform(plotData['data'])
 
-        plt.scatter(reduced[:, 0], reduced[:, 1], alpha=0.5, cmap='rainbow')
-        # plt.scatter(reduced[:, 0], reduced[:, 1], c=plotData['label'], alpha=0.5, cmap='rainbow')
-        plt.colorbar()
+        by_label = {}
+        for i, label in enumerate(plotData['label']):
+            if label not in by_label:
+                by_label[label] = {'x':[], 'y':[]}
+            by_label[label]['x'].append(reduced[i,0])
+            by_label[label]['y'].append(reduced[i,1])
+
+        by_label = sorted(by_label.items(), key=lambda x: x[0])
+
+        label_map = {v:k for k, v in self.test_loader.dataset.label_map.items()}
+        for label, data in by_label:
+            plt.scatter(data['x'], data['y'], label=label_map[label], alpha=0.5, cmap='rainbow')
+
+        plt.legend()
         plt.show()
 
     def plot(self):
