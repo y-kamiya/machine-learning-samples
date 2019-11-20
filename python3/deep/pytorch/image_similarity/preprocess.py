@@ -12,22 +12,11 @@ import cv2
 
 PROCESSED_IMAGES_DIR = 'processed_images'
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='check image similarity')
-    parser.add_argument('target_dir', help='target image directory path')
-    parser.add_argument('--save', action='store_true', help='transform and save images')
-    parser.add_argument('--similar_images_dir', default='./similar_images', help='transform and save images')
-    parser.add_argument('--similar_groups', type=int, default=20, help='valid group count')
-    parser.add_argument('--similar_threshold', type=float, default=0.1, help='treat as simialr images when value is smaller than this')
-    args = parser.parse_args()
-    print(args)
- 
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
-
+def remove_images():
     print('--- remove duplicated images ---')
+
     n_remove_file = 0
     file_map = {}
-    remove_files = []
     for file in tqdm(os.listdir(args.target_dir)):
         (name, ext) = os.path.splitext(file)
         if ext != '.png':
@@ -48,8 +37,10 @@ if __name__ == "__main__":
 
     print('removed: {}, remained: {}'.format(n_remove_file, len(file_map)))
 
+    return file_map
 
-    print('--- remove similar images ---')
+def categorize_images():
+    print('--- categorize_images images ---')
     index = 0
     groups = []
     for file in tqdm(file_map.values()):
@@ -92,22 +83,41 @@ if __name__ == "__main__":
             os.symlink(src, dst)
 
 
-    if args.save:
-        print('--- transform images ---')
-        list = [
-            transforms.Grayscale(),
-            transforms.Resize((144, 256)),
-        ]
-        forms = transforms.Compose(list)
+def transform_images():
+    print('--- transform images ---')
+    list = [
+        transforms.Grayscale(),
+        transforms.Resize((144, 256)),
+    ]
+    forms = transforms.Compose(list)
 
-        if not os.path.exists(PROCESSED_IMAGES_DIR):
-            os.mkdir(PROCESSED_IMAGES_DIR)
+    if not os.path.exists(PROCESSED_IMAGES_DIR):
+        os.mkdir(PROCESSED_IMAGES_DIR)
 
-        for file in tqdm(file_map.values()):
-            path = '{}/{}'.format(args.target_dir, file)
-            image = Image.open(path)
+    for file in tqdm(file_map.values()):
+        path = '{}/{}'.format(args.target_dir, file)
+        image = Image.open(path)
 
-            forms(image).save('./{}/{}'.format(PROCESSED_IMAGES_DIR, file))
-        
+        forms(image).save('./{}/{}'.format(PROCESSED_IMAGES_DIR, file))
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='check image similarity')
+    parser.add_argument('target_dir', help='target image directory path')
+    parser.add_argument('--type', default='default', help='default, remove')
+    parser.add_argument('--transform', action='store_true', help='transform and save images')
+    parser.add_argument('--categorize', action='store_true', help='categorize images')
+    parser.add_argument('--similar_images_dir', default='./similar_images', help='transform and save images')
+    parser.add_argument('--similar_groups', type=int, default=20, help='valid group count')
+    parser.add_argument('--similar_threshold', type=float, default=0.1, help='treat as simialr images when value is smaller than this')
+    args = parser.parse_args()
+    print(args)
+ 
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+    file_map = remove_images()
+
+    if args.categorize:
+        categorize_images()
+
+    if args.transform:
+        transform_images()
