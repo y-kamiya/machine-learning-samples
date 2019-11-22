@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import random
 import shutil
 import numpy as np
 from tqdm import tqdm
@@ -67,7 +68,7 @@ def categorize_images():
             index = 0
             groups = sorted(groups, key=lambda x:-len(x))
 
-    similar_image_dir = './{}'.format(args.similar_images_dir)
+    similar_image_dir = './{}'.format(args.dest_dir)
     if os.path.exists(similar_image_dir):
         shutil.rmtree(similar_image_dir)
 
@@ -100,17 +101,40 @@ def transform_images():
 
         forms(image).save('./{}/{}'.format(PROCESSED_IMAGES_DIR, file))
 
+def copy_images():
+    assert args.dest_dir != None, "use --dest_dir to show files to remove"
+
+    print('--- copy images ---')
+
+    print('copy some images in {} to {}'.format(args.target_dir, args.dest_dir))
+
+    count = len([name for name in os.listdir(args.target_dir)])
+    random_list = [random.randint(0, count) for _ in range(args.copy_count)]
+
+    copy_dir = './{}'.format(args.dest_dir)
+    os.makedirs(copy_dir, exist_ok=True)
+    for i, entry  in enumerate(os.listdir(args.target_dir)):
+        if i not in random_list:
+            continue
+        symlink = '{}/{}'.format(args.target_dir, entry)
+        file = os.path.realpath(symlink)
+        (name, ext) = os.path.splitext(file)
+        if ext != '.png':
+            continue
+
+        shutil.copyfile(file, '{}/{}'.format(copy_dir, entry))
+
 def remove_images():
-    assert args.similar_images_dir != None, "use --similar_images_dir to show files to remove"
+    assert args.dest_dir != None, "use --dest_dir to show files to remove"
 
     print('--- remove images ---')
 
     remove_dir = '/tmp/remove_images'
-    print('move images in {} from {} to {}'.format(args.similar_images_dir, args.target_dir, remove_dir))
+    print('move images in {} from {} to {}'.format(args.dest_dir, args.target_dir, remove_dir))
 
     os.makedirs(remove_dir, exist_ok=True)
-    for entry  in tqdm(os.listdir(args.similar_images_dir)):
-        symlink = '{}/{}'.format(args.similar_images_dir, entry)
+    for entry  in tqdm(os.listdir(args.dest_dir)):
+        symlink = '{}/{}'.format(args.dest_dir, entry)
         file = os.path.realpath(symlink)
         (name, ext) = os.path.splitext(file)
         if ext != '.png':
@@ -121,12 +145,14 @@ def remove_images():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('target_dir', help='target image directory path')
-    parser.add_argument('--type', default='default', help='default, remove')
     parser.add_argument('--transform', action='store_true', help='transform and save images')
     parser.add_argument('--categorize', action='store_true', help='categorize images')
-    parser.add_argument('--similar_images_dir', default='./similar_images', help='transform and save images')
+    parser.add_argument('--remove', action='store_true', help='remove images')
+    parser.add_argument('--copy', action='store_true', help='copy some images to keep')
+    parser.add_argument('--dest_dir', default='./similar_images', help='destination directory')
     parser.add_argument('--similar_groups', type=int, default=20, help='valid group count')
     parser.add_argument('--similar_threshold', type=float, default=0.1, help='treat as simialr images when value is smaller than this')
+    parser.add_argument('--copy_count', type=int, default=10, help='file count to copy')
     args = parser.parse_args()
     print(args)
  
@@ -137,8 +163,11 @@ if __name__ == "__main__":
     if args.categorize:
         categorize_images()
 
-    if args.type == 'remove':
+    if args.remove:
         remove_images()
 
     if args.transform:
         transform_images()
+
+    if args.copy:
+        copy_images()
