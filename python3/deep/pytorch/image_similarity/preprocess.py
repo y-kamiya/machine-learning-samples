@@ -12,7 +12,7 @@ import cv2
 
 PROCESSED_IMAGES_DIR = 'processed_images'
 
-def remove_images():
+def remove_duplicated_images():
     print('--- remove duplicated images ---')
 
     n_remove_file = 0
@@ -100,6 +100,24 @@ def transform_images():
 
         forms(image).save('./{}/{}'.format(PROCESSED_IMAGES_DIR, file))
 
+def remove_images():
+    assert args.similar_images_dir != None, "use --similar_images_dir to show files to remove"
+
+    print('--- remove images ---')
+
+    remove_dir = '/tmp/remove_images'
+    print('move images in {} from {} to {}'.format(args.similar_images_dir, args.target_dir, remove_dir))
+
+    os.makedirs(remove_dir, exist_ok=True)
+    for entry  in tqdm(os.listdir(args.similar_images_dir)):
+        symlink = '{}/{}'.format(args.similar_images_dir, entry)
+        file = os.path.realpath(symlink)
+        (name, ext) = os.path.splitext(file)
+        if ext != '.png':
+            continue
+
+        shutil.move(file, remove_dir)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('target_dir', help='target image directory path')
@@ -114,10 +132,13 @@ if __name__ == "__main__":
  
     ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-    file_map = remove_images()
+    file_map = remove_duplicated_images()
 
     if args.categorize:
         categorize_images()
+
+    if args.type == 'remove':
+        remove_images()
 
     if args.transform:
         transform_images()
