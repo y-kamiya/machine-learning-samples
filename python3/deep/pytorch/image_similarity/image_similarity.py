@@ -75,8 +75,13 @@ class MyDataset(Dataset):
 
     def __transform_param(self, image):
         load_w, load_h = image.size
-        x = random.randint(0, np.maximum(0, load_w - self.config.crop_width))
-        y = random.randint(0, np.maximum(0, load_h - self.config.crop_height))
+        diff_w = load_w - self.config.crop_width
+        diff_h = load_h - self.config.crop_height
+        x = diff_w // 2
+        y = diff_h // 2
+        if not self.config.crop_center:
+            x = random.randint(0, np.maximum(0, diff_w))
+            y = random.randint(0, np.maximum(0, diff_h))
 
         return {'crop_pos': (x, y)}
 
@@ -361,6 +366,7 @@ if __name__ == "__main__":
     parser.add_argument('--model', default=None, help='model path to load')
     parser.add_argument('--dataroot', default='./data', help='where the data directory exists')
     parser.add_argument('--output-dir-name', default=None, help='output directory name')
+    parser.add_argument('--crop-center', action='store_true', help='crop center of the image')
     parser.add_argument('--crop-width', type=int, default=0, help='crop size')
     parser.add_argument('--crop-height', type=int, default=0, help='crop size, 0 means no crop')
     parser.add_argument('--analyze', default='', help='image dir to get latent feature')
@@ -387,6 +393,9 @@ if __name__ == "__main__":
 
     if args.plot:
         args.batch_size = 1
+
+    if args.analyze:
+        args.crop_center = True
 
     os.makedirs(args.output_dir, exist_ok=True)
 
