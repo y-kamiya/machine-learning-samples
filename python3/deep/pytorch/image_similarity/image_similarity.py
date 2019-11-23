@@ -25,15 +25,9 @@ import model
 class MyDataset(Dataset):
     IMG_EXTENSIONS = ['.png']
 
-    def __init__(self, config, phase=None, path=None):
+    def __init__(self, config, dir):
         self.config = config
-
-        if phase != None:
-            dir = os.path.join(config.dataroot, phase)
-            self.images, self.labels = self.__make_dataset(dir)
-
-        if path != None:
-            self.images = [path]
+        self.images, self.labels = self.__make_dataset(dir)
 
     @classmethod
     def is_image_file(self, fname):
@@ -45,6 +39,7 @@ class MyDataset(Dataset):
         images = []
         labels = []
         self.label_map = {}
+        self.path_map = {}
 
         for root, _, fnames in sorted(os.walk(dir)):
             for fname in fnames:
@@ -55,6 +50,8 @@ class MyDataset(Dataset):
                     label_str = fname.split('_')[0]
                     if label_str not in self.label_map:
                         self.label_map[label_str] = len(self.label_map)
+                        self.path_map[path] = len(self.path_map)
+
                     labels.append(self.label_map[label_str])
 
         return images, labels
@@ -114,7 +111,8 @@ class Trainer():
     def __create_loader(self, phase):
         config = self.config
         if not config.use_mnist:
-            dataset = MyDataset(self.config, phase)
+            dir = os.path.join(config.dataroot, phase)
+            dataset = MyDataset(self.config, dir)
             return DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
 
         is_train = True if phase == 'train' else False
@@ -236,35 +234,6 @@ class Trainer():
         self.writer.add_scalar('LossBCE/test', test_loss, epoch)
         self.writer.add_scalar('LossMSE/test', test_loss_mse, epoch)
 
-    def latent_feature(self):
-        self.model.eval()
-        with torch.no_grad():
-            pickle_path = '{}/latent_feature.pickle'.format(self.config.output_dir)
-            data = []
-            if os.path.exists(pickle_path):
-                with open(pickle_path, 'rb') as fp:
-                    data = pickle.load(fp)
-
-            filename = self.config.latent_feature.split('/')[-1]
-            label = filename.split('.')[0]
-
-            # image = Image.open('{}/{}'.format(self.config.dataroot, self.config.latent_feature))
-            path = '{}'.format(self.config.latent_feature)
-            dataset = MyDataset(self.config, None, path)
-            loader = DataLoader(dataset, batch_size=1)
-
-            _, (x, _) = next(enumerate(loader))
-
-            z = self.model.latent_feature(x).squeeze()
-            data.append({
-                'path': self.config.latent_feature,
-                'label': label,
-                'feature': z,
-            })
-
-            with open(pickle_path, 'wb') as fp:
-                pickle.dump(data, fp)
-
     def __cos_sim(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
@@ -273,26 +242,36 @@ class Trainer():
         return '<img src="{}" width="50" height="50">'.format(path)
 
     def analyze(self):
-        pickle_path = '{}/latent_feature.pickle'.format(self.config.output_dir)
-        if os.path.exists(pickle_path):
-            with open(pickle_path, 'rb') as fp:
-                data = pickle.load(fp)
+        self.model.eval()
+        with torch.no_grad():
+            dataset = MyDataset(self.config, self.config.analyze)
+            loader = DataLoader(dataset, batch_size=1)
 
-        table = []
-        for row in data:
-            d = []
-            for col in data:
-                d.append(self.__cos_sim(row['feature'].numpy(), col['feature'].numpy()))
-            table.append(d)
+            path_map = {v:k for k, v in dataset.path_map.items()}
 
-        for i in range(len(data)):
-            table[i].insert(0, self.__img_tag(data[i]['path']))
+            data = []
+            for x, label in loader:
+                z = self.model.latent_feature(x).squeeze()
+                data.append({
+                    'path': path_map[label.item()],
+                    'feature': z,
+                })
 
-        headers = [self.__img_tag(entry['path']) for entry in data]
-        headers.insert(0, "")
+            table = []
+            for row in data:
+                d = []
+                for col in data:
+                    d.append(self.__cos_sim(row['feature'].numpy(), col['feature'].numpy()))
+                table.append(d)
 
-        html = tabulate.tabulate(table, headers, tablefmt='html', floatfmt='.3f', numalign='right')
-        print(html)
+            for i in range(len(data)):
+                table[i].insert(0, self.__img_tag(data[i]['path']))
+
+            headers = [self.__img_tag(entry['path']) for entry in data]
+            headers.insert(0, "")
+
+            html = tabulate.tabulate(table, headers, tablefmt='html', floatfmt='.2f', numalign='right')
+            print(html)
 
     def sample_image(self, epoch):
         with torch.no_grad():
@@ -384,8 +363,7 @@ if __name__ == "__main__":
     parser.add_argument('--output-dir-name', default=None, help='output directory name')
     parser.add_argument('--crop-width', type=int, default=0, help='crop size')
     parser.add_argument('--crop-height', type=int, default=0, help='crop size, 0 means no crop')
-    parser.add_argument('--latent-feature', default='', help='image file path to get latent feature')
-    parser.add_argument('--analyze', action='store_true', help='compare cosine similarity of images')
+    parser.add_argument('--analyze', default='', help='image dir to get latent feature')
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
     parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
     args = parser.parse_args()
@@ -415,10 +393,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     trainer = Trainer(args)
-
-    if args.latent_feature:
-        trainer.latent_feature()
-        sys.exit()
 
     if args.analyze:
         trainer.analyze()
