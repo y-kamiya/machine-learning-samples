@@ -177,6 +177,15 @@ class Trainer():
         dim = self.config.crop_height * self.config.crop_width
         return F.mse_loss(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
+    def __create_input(self, data):
+        factor = self.config.noise_factor 
+        if factor == 0:
+            return data.to(self.config.device)
+
+        dev = self.config.noise_dev
+        x = (data + torch.empty_like(data).normal_(0, dev) * factor).clamp_(0,1)
+        return x.to(self.config.device)
+
     def train(self, epoch):
         start_time = time.time()
 
@@ -185,9 +194,8 @@ class Trainer():
         train_loss = 0
         train_loss_mse = 0
         for batch_idx, (data, _) in enumerate(self.train_loader):
-            data = data.to(self.config.device)
             self.optimizer.zero_grad()
-            recon_batch, mu, logvar = self.model(data)
+            recon_batch, mu, logvar = self.model(self.__create_input(data))
 
             loss = self.__loss_function(recon_batch, data, mu, logvar)
             loss_mse = self.__loss_mse(recon_batch, data)
@@ -365,6 +373,8 @@ if __name__ == "__main__":
     parser.add_argument('--model-type', default='ae', help='model type')
     parser.add_argument('--model', default=None, help='model path to load')
     parser.add_argument('--dataroot', default='./data', help='where the data directory exists')
+    parser.add_argument('--noise-dev', type=float, default=0.2, help='noise deviations for DAE')
+    parser.add_argument('--noise-factor', type=float, default=0.0, help='noise factor for DAE')
     parser.add_argument('--output-dir-name', default=None, help='output directory name')
     parser.add_argument('--crop-center', action='store_true', help='crop center of the image')
     parser.add_argument('--crop-width', type=int, default=0, help='crop size')
