@@ -180,11 +180,10 @@ class Trainer():
     def __create_input(self, data):
         factor = self.config.noise_factor 
         if factor == 0:
-            return data.to(self.config.device)
+            return data
 
         dev = self.config.noise_dev
-        x = (data + torch.empty_like(data).normal_(0, dev) * factor).clamp_(0,1)
-        return x.to(self.config.device)
+        return (data + torch.empty_like(data).normal_(0, dev) * factor).clamp_(0,1)
 
     def train(self, epoch):
         start_time = time.time()
@@ -194,6 +193,7 @@ class Trainer():
         train_loss = 0
         train_loss_mse = 0
         for batch_idx, (data, _) in enumerate(self.train_loader):
+            data = data.to(self.config.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(self.__create_input(data))
 
