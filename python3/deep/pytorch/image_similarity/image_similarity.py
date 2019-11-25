@@ -368,6 +368,26 @@ class Trainer():
         plt.legend()
         plt.show()
 
+    def save_latent_feature(self):
+        self.model.eval()
+        with torch.no_grad():
+            data = {}
+
+            for dir in self.config.latent_feature:
+                dataset = MyDataset(self.config, dir)
+                loader = DataLoader(dataset, batch_size=self.config.batch_size)
+
+                for _, batch in self.__enumerate_loader(loader):
+                    z = self.model.latent_feature(batch['data']).squeeze()
+
+                    paths = batch['path']
+                    for i in range(len(paths)):
+                        data[paths[i]] = z[i]
+
+                file = '{}/latent_feature.pickle'.format(args.output_dir)
+                with open(file, 'wb') as fp:
+                    pickle.dump(data, fp)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('--batch-size', type=int, default=128, metavar='N', help='input batch size for training (default: 128)')
@@ -376,6 +396,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+    parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--log-file', action='store_true', help='print log to file')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate of optimizer')
@@ -429,6 +450,10 @@ if __name__ == "__main__":
 
     if args.analyze:
         trainer.analyze()
+        sys.exit()
+
+    if args.latent_feature:
+        trainer.save_latent_feature()
         sys.exit()
 
     if args.plot:
