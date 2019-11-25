@@ -2,6 +2,7 @@ from __future__ import print_function
 import argparse
 import sys
 import os
+import shutil
 import time
 import random
 import pickle
@@ -388,6 +389,46 @@ class Trainer():
                 with open(file, 'wb') as fp:
                     pickle.dump(data, fp)
 
+    def categorize_images(self):
+        file = '{}/latent_feature.pickle'.format(args.output_dir)
+        assert os.path.exists(file), "latent_feature.pickle does not exist, please execute --latent-feature before"
+
+        with open(file, 'rb') as fp:
+            data = pickle.load(fp)
+
+        processed = {}
+        groups = []
+        for src_i, (src_path, src_z) in enumerate(data.items()):
+            if src_i in processed:
+                continue
+            processed[src_i] = True
+            groups.append([src_path])
+            for tgt_i, (tgt_path, tgt_z) in enumerate(data.items()):
+                if tgt_i in processed:
+                    continue
+                similarity = self.__cos_sim(src_z.numpy(), tgt_z.numpy())
+                if 0.8 < similarity:
+                    processed[tgt_i] = True
+                    groups[src_i].append(tgt_path)
+                
+        groups = sorted(groups, key=lambda x:-len(x))
+
+        dir = './categorized'
+        if os.path.exists(dir):
+            shutil.rmtree(dir)
+
+        os.mkdir(dir)
+
+        for i, images in enumerate(groups):
+            if not os.path.exists('{}/{}'.format(dir, i)):
+                os.mkdir('{}/{}'.format(dir, i))
+
+            for path in images:
+                src = os.path.realpath(path)
+                dst = '{}/{}/{}'.format(dir, i, os.path.basename(path))
+                os.symlink(src, dst)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('--batch-size', type=int, default=128, metavar='N', help='input batch size for training (default: 128)')
@@ -396,7 +437,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
-    parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
     parser.add_argument('--log-file', action='store_true', help='print log to file')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate of optimizer')
@@ -413,6 +453,8 @@ if __name__ == "__main__":
     parser.add_argument('--analyze', default='', help='image dir to get latent feature')
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
     parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
+    parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
+    parser.add_argument('--categorize', action='store_true', help='categorize images')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -454,6 +496,10 @@ if __name__ == "__main__":
 
     if args.latent_feature:
         trainer.save_latent_feature()
+        sys.exit()
+
+    if args.categorize:
+        trainer.categorize_images()
         sys.exit()
 
     if args.plot:
