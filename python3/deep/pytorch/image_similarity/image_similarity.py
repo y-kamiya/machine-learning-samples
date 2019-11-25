@@ -29,34 +29,31 @@ class MyDataset(Dataset):
 
     def __init__(self, config, dir):
         self.config = config
-        self.images, self.labels = self.__make_dataset(dir)
+
+        self.paths = []
+        self.labels = []
+        self.label_map = {}
+
+        self.__make_dataset(dir)
 
     @classmethod
     def is_image_file(self, fname):
         return any(fname.endswith(ext) for ext in self.IMG_EXTENSIONS)
 
-    @classmethod
     def __make_dataset(self, dir):
         assert os.path.isdir(dir), '%s is not a valid directory' % dir
-        images = []
-        labels = []
-        self.label_map = {}
-        self.path_map = {}
 
         for root, _, fnames in sorted(os.walk(dir)):
             for fname in fnames:
                 if self.is_image_file(fname):
                     path = os.path.join(root, fname)
-                    images.append(path)
+                    self.paths.append(path)
 
                     label_str = fname.split('_')[0]
                     if label_str not in self.label_map:
                         self.label_map[label_str] = len(self.label_map)
-                        self.path_map[path] = len(self.path_map)
 
-                    labels.append(self.label_map[label_str])
-
-        return images, labels
+                    self.labels.append(self.label_map[label_str])
 
     def __transform(self, param):
         list = []
@@ -88,16 +85,16 @@ class MyDataset(Dataset):
         return {'crop_pos': (x, y)}
 
     def __getitem__(self, index):
-        path = self.images[index]
+        path = self.paths[index]
         image = Image.open(path)
 
         param = self.__transform_param(image)
         transform = self.__transform(param)
 
-        return (transform(image), self.labels[index])
+        return {'data':transform(image), 'label':self.labels[index], 'path':self.paths[index]}
 
     def __len__(self):
-        return len(self.images)
+        return len(self.paths)
 
 class Trainer():
     def __init__(self, config):
@@ -114,6 +111,14 @@ class Trainer():
 
         self.train_loader = self.__create_loader('train')
         self.test_loader = self.__create_loader('test')
+
+    def __enumerate_loader(self, loader):
+        if self.config.use_mnist:
+            for i, (data, label) in enumerate(loader):
+                yield (i, {'data':data, 'label':label})
+        else:
+            for i, dict in enumerate(loader):
+                yield (i, dict)
 
     def __create_loader(self, phase):
         config = self.config
@@ -194,8 +199,8 @@ class Trainer():
         n_dataset = len(self.train_loader.dataset)
         train_loss = 0
         train_loss_mse = 0
-        for batch_idx, (data, _) in enumerate(self.train_loader):
-            data = data.to(self.config.device)
+        for batch_idx, batch in self.__enumerate_loader(self.train_loader):
+            data = batch['data'].to(self.config.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(self.__create_input(data))
 
@@ -227,8 +232,8 @@ class Trainer():
         test_loss = 0
         test_loss_mse = 0
         with torch.no_grad():
-            for i, (data, _) in enumerate(self.test_loader):
-                data = data.to(self.config.device)
+            for i, batch in self.__enumerate_loader(self.test_loader):
+                data = batch['data'].to(self.config.device)
                 recon_batch, mu, logvar = self.model(data)
 
                 test_loss += self.__loss_function(recon_batch, data, mu, logvar).item()
@@ -262,13 +267,11 @@ class Trainer():
             dataset = MyDataset(self.config, self.config.analyze)
             loader = DataLoader(dataset, batch_size=1)
 
-            path_map = {v:k for k, v in dataset.path_map.items()}
-
             data = []
-            for x, label in loader:
-                z = self.model.latent_feature(x).squeeze()
+            for batch in loader:
+                z = self.model.latent_feature(batch['data']).squeeze()
                 data.append({
-                    'path': path_map[label.item()],
+                    'path': batch['path'][0],
                     'feature': z,
                 })
 
@@ -306,7 +309,9 @@ class Trainer():
     def __plot_with_sne(self):
         plotData = {'data':[], 'label':[]}
         with torch.no_grad():
-            for i, (data, label) in enumerate(self.test_loader):
+            for i, batch in self.__enumerate_loader(self.test_loader):
+                data = batch['data']
+                label = batch['label']
                 if i == 1000:
                     break
                 z = self.model.latent_feature(data).squeeze()
@@ -343,7 +348,9 @@ class Trainer():
 
         plotData = {}
         with torch.no_grad():
-            for i, (data, label) in enumerate(self.test_loader):
+            for i, batch in self.__enumerate_loader(self.test_loader):
+                data = batch['data']
+                label = batch['label']
                 if i == 1000:
                     break
                 z = self.model.latent_feature(data).squeeze()
