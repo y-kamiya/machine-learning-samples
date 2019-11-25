@@ -19,6 +19,8 @@ from PIL import Image
 import tabulate
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import logzero
+from logzero import logger
 
 import model
 
@@ -205,14 +207,14 @@ class Trainer():
 
             self.optimizer.step()
             if batch_idx % self.config.log_interval == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tLoss MSE: {:.6f}'.format(
+                logger.info('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tLoss MSE: {:.6f}'.format(
                     epoch, batch_idx * len(data), n_dataset,
                     100. * batch_idx / len(self.train_loader),
                     loss.item() / len(data), loss_mse.item() / len(data)))
 
         time_epoch = time.time() - start_time
         time_all = time.time() - self.start_time
-        print('====> Epoch: {} Average loss: {:.4f}\tAverage loss MSE: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
+        logger.info('====> Epoch: {} Average loss: {:.4f}\tAverage loss MSE: {:.4f}\tTime epoch: {:.3f}\tTime all: {:.3f}'.format(
               epoch, train_loss / n_dataset, train_loss_mse / n_dataset, time_epoch, time_all))
         self.writer.add_scalar('LossBCE/train', loss, epoch, time_all)
         self.writer.add_scalar('LossMSE/train', loss_mse, epoch, time_all)
@@ -243,7 +245,7 @@ class Trainer():
         n_dataset = len(self.test_loader.dataset)
         test_loss /= n_dataset
         test_loss_mse /= n_dataset
-        print('====> Test set loss: {:.4f}\tMSE: {:.4f}'.format(test_loss, test_loss_mse))
+        logger.info('====> Test set loss: {:.4f}\tMSE: {:.4f}'.format(test_loss, test_loss_mse))
         self.writer.add_scalar('LossBCE/test', test_loss, epoch)
         self.writer.add_scalar('LossMSE/test', test_loss_mse, epoch)
 
@@ -292,14 +294,14 @@ class Trainer():
             sample = self.model.decode(sample).cpu()
             output_file = '{}/sample_{}.png'.format(self.config.output_dir, str(epoch))
             save_image(sample.view(16, self.config.channel_size, self.config.crop_height, self.config.crop_width), output_file)
-            print('save image to {}'.format(output_file))
+            logger.info('save image to {}'.format(output_file))
 
     def save_model(self):
         model_dir = '{}/model'.format(self.config.output_dir)
         os.makedirs(model_dir, exist_ok=True)
         model_path = '{}/epoch{}.pth'.format(model_dir, epoch)
         torch.save(self.model.state_dict(), model_path)
-        print('save model to {}'.format(model_path))
+        logger.info('save model to {}'.format(model_path))
 
     def __plot_with_sne(self):
         plotData = {'data':[], 'label':[]}
@@ -368,6 +370,7 @@ if __name__ == "__main__":
     parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N', help='how many batches to wait before logging training status')
+    parser.add_argument('--log-file', action='store_true', help='print log to file')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate of optimizer')
     parser.add_argument('--save-interval', type=int, default=5, metavar='N', help='how many epochs to save model and sample image')
     parser.add_argument('--model-type', default='ae', help='model type')
@@ -393,6 +396,10 @@ if __name__ == "__main__":
 
     args.output_dir = '{}/output/{}'.format(args.dataroot, args.output_dir_name)
     args.tensorboard_log_dir = '{}/output/runs/{}'.format(args.dataroot, args.output_dir_name)
+
+    if args.log_file:
+        filepath = '{}/default.log'.format(args.output_dir)
+        logzero.logfile(filepath, disableStderrLogger=True)
 
     # assert not os.path.exists(args.output_dir), 'output dir has already existed, change --output-dir-name'
 
