@@ -154,6 +154,9 @@ class Trainer():
         if self.config.model_type == 'ae_vgg':
             return model.AE_VGG(self.config).to(device)
 
+        if self.config.model_type == 'vae_vgg':
+            return model.VAE_VGG(self.config).to(device)
+
         return model.AE(self.config).to(device)
 
     def __weights_init(self, m):
@@ -174,7 +177,7 @@ class Trainer():
         BCE = F.binary_cross_entropy(recon_x.view(-1, dim), x.view(-1, dim), reduction='sum')
 
         KLD = 0
-        if mu != None and logvar != None:
+        if mu is not None and logvar is not None:
             # see Appendix B from VAE paper:
             # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
             # https://arxiv.org/abs/1312.6114
@@ -463,7 +466,7 @@ if __name__ == "__main__":
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
     parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
     parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
-    parser.add_argument('--categorize', default='latent_feature.pickle', help='categorize images')
+    parser.add_argument('--categorize', default=None, help='categorize images')
     parser.add_argument('--categorize_threshold', type=float, default=0.8, help='similarity threshold')
     args = parser.parse_args()
 

@@ -240,5 +240,109 @@ class AE_VGG(Base):
         z, _ = self.encode(x)
         return z
 
+class VAE_VGG(Base):
+    def __init__(self, config):
+        super(VAE_VGG, self).__init__()
 
+        self.config = config
+        dim = config.dim
 
+        self.encoder = nn.Sequential(
+            self.__up(config.channel_size, 16, 2),
+            self.__up(16, 32, 2),
+            self.__up(32, 64, 3),
+            self.__up(64, 128, 3),
+            self.__up(128, 128, 3),
+        )
+
+        h, w = self.__enc_output_dim()
+        enc_output_dim = h * w
+        hidden_dim = 1024
+        self.fcEnc1 = nn.Linear(enc_output_dim * 128, hidden_dim)
+        self.fcEnc21 = nn.Linear(hidden_dim, dim)
+        self.fcEnc22 = nn.Linear(hidden_dim, dim)
+
+        self.fcDec2 = nn.Linear(dim, hidden_dim)
+        self.fcDec1 = nn.Linear(hidden_dim, enc_output_dim * 128)
+
+        self.down5 = self.__down(128, 128, 3)
+        self.down4 = self.__down(128, 64, 3)
+        self.down3 = self.__down(64, 32, 3)
+        self.down2 = self.__down(32, 16, 2)
+        self.down1 = self.__down(16, config.channel_size, 2, False)
+
+    def __enc_output_dim(self):
+        w = self.config.crop_width
+        h = self.config.crop_height
+
+        for i in range(5):
+            w = math.floor((w - 1 - 1) / 2 + 1)
+            h = math.floor((h - 1 - 1) / 2 + 1)
+
+        return (h, w)
+
+    def __up(self, input, output, n_layers):
+        layers = []
+        for i in range(n_layers):
+            n_filters = input if i == 0 else output
+            layers.append(nn.Conv2d(n_filters, output, kernel_size=3, padding=1))
+            layers.append(nn.ReLU(True))
+
+        layers.append(nn.MaxPool2d(2))
+
+        return nn.Sequential(*layers)
+
+    def __down(self, input, output, n_layers, activation=True):
+        layers = []
+        for i in range(n_layers):
+            n_filters = input if i != (n_layers - 1) else output
+            layers.append(nn.ConvTranspose2d(input, n_filters, kernel_size=3, padding=1))
+            if activation:
+                layers.append(nn.ReLU(True))
+
+        return nn.Sequential(*layers)
+
+    def __reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
+
+    def encode(self, x):
+        batch_size = x.shape[0]
+        x = self.encoder(x)
+        x = F.relu(self.fcEnc1(x.view(batch_size, -1)))
+        return self.fcEnc21(x), self.fcEnc22(x)
+
+    def decode(self, z):
+        batch_size = z.shape[0]
+        h, w = self.__enc_output_dim()
+        x = F.relu(self.fcDec2(z))
+        x = F.relu(self.fcDec1(x))
+        x = x.view(batch_size, 128, w, h)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.down5(x)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.down4(x)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.down3(x)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.down2(x)
+        x = F.max_unpool2d(x, self.__unpool_indices(2, x.shape), 2)
+        x = self.down1(x)
+        return torch.sigmoid(x)
+
+    def __unpool_indices(self, kernel_size, input_shape):
+        w = kernel_size * input_shape[-1]
+        h = kernel_size * input_shape[-2]
+        indices = torch.arange(0, w*h, step=kernel_size)
+        indices = indices.view(h, -1)[0::kernel_size]
+        return indices.expand(input_shape).to(self.config.device)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.__reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+
+    def latent_feature(self, x):
+        mu, logvar = self.encode(x)
+        return self.__reparameterize(mu, logvar)
