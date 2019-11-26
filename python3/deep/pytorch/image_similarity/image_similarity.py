@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import logzero
 from logzero import logger
+from tqdm import tqdm
 
 import model
 
@@ -378,7 +379,8 @@ class Trainer():
                 dataset = MyDataset(self.config, dir)
                 loader = DataLoader(dataset, batch_size=self.config.batch_size)
 
-                for _, batch in self.__enumerate_loader(loader):
+                logger.info(dir)
+                for _, batch in tqdm(self.__enumerate_loader(loader)):
                     z = self.model.latent_feature(batch['data']).squeeze()
 
                     paths = batch['path']
@@ -398,7 +400,7 @@ class Trainer():
 
         processed = {}
         groups = []
-        for src_i, (src_path, src_z) in enumerate(data.items()):
+        for src_i, (src_path, src_z) in tqdm(enumerate(data.items())):
             if src_i in processed:
                 continue
             processed[src_i] = True
@@ -407,9 +409,9 @@ class Trainer():
                 if tgt_i in processed:
                     continue
                 similarity = self.__cos_sim(src_z.numpy(), tgt_z.numpy())
-                if 0.8 < similarity:
+                if 0.7 < similarity:
                     processed[tgt_i] = True
-                    groups[src_i].append(tgt_path)
+                    groups[-1].append(tgt_path)
                 
         groups = sorted(groups, key=lambda x:-len(x))
 
