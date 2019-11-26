@@ -23,6 +23,7 @@ from sklearn.manifold import TSNE
 import logzero
 from logzero import logger
 from tqdm import tqdm
+from datetime import datetime
 
 import model
 
@@ -387,12 +388,18 @@ class Trainer():
                     for i in range(len(paths)):
                         data[paths[i]] = z[i]
 
-                file = '{}/latent_feature.pickle'.format(args.output_dir)
-                with open(file, 'wb') as fp:
-                    pickle.dump(data, fp)
+            path = '{}/latent_feature.pickle'.format(args.output_dir)
+            if os.path.exist(path):
+                timestamp = datetime.now().strftime('%s')
+                path = '{}/latent_feature_{}.pickle'.format(args.output_dir, timestamp)
 
-    def categorize_images(self):
-        file = '{}/latent_feature.pickle'.format(args.output_dir)
+            logger.info('save pickle to {}'.format(path))
+            with open(path, 'wb') as fp:
+                pickle.dump(data, fp)
+
+    @classmethod
+    def categorize_images(self, config):
+        file = config.categorize
         assert os.path.exists(file), "latent_feature.pickle does not exist, please execute --latent-feature before"
 
         with open(file, 'rb') as fp:
@@ -408,8 +415,8 @@ class Trainer():
             for tgt_i, (tgt_path, tgt_z) in enumerate(data.items()):
                 if tgt_i in processed:
                     continue
-                similarity = self.__cos_sim(src_z.numpy(), tgt_z.numpy())
-                if 0.7 < similarity:
+                similarity = self.__cos_sim(self, src_z.numpy(), tgt_z.numpy())
+                if config.categorize_threshold < similarity:
                     processed[tgt_i] = True
                     groups[-1].append(tgt_path)
                 
@@ -456,7 +463,8 @@ if __name__ == "__main__":
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
     parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
     parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
-    parser.add_argument('--categorize', action='store_true', help='categorize images')
+    parser.add_argument('--categorize', default='latent_feature.pickle', help='categorize images')
+    parser.add_argument('--categorize_threshold', type=float, default=0.8, help='similarity threshold')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -490,6 +498,10 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
 
+    if args.categorize is not None:
+        Trainer.categorize_images(args)
+        sys.exit()
+
     trainer = Trainer(args)
 
     if args.analyze:
@@ -498,10 +510,6 @@ if __name__ == "__main__":
 
     if args.latent_feature:
         trainer.save_latent_feature()
-        sys.exit()
-
-    if args.categorize:
-        trainer.categorize_images()
         sys.exit()
 
     if args.plot:
