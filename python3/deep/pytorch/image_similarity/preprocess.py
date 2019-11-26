@@ -104,12 +104,18 @@ def transform_images():
 def copy_images():
     assert args.dest_dir != None, "use --dest_dir to show files to remove"
 
-    print('--- copy images ---')
+    if args.recursive:
+        args.recursive = False
+        for root, _, _ in os.walk(args.target_dir):
+            args.target_dir = root
+            copy_images()
+        return
 
+    print('--- copy images ---')
     print('copy some images in {} to {}'.format(args.target_dir, args.dest_dir))
 
     count = len([name for name in os.listdir(args.target_dir)])
-    random_list = [random.randint(0, count) for _ in range(args.copy_count)]
+    random_list = [random.randint(0, count-1) for _ in range(args.copy_count)]
 
     copy_dir = './{}'.format(args.dest_dir)
     os.makedirs(copy_dir, exist_ok=True)
@@ -125,16 +131,20 @@ def copy_images():
         shutil.copyfile(file, '{}/{}'.format(copy_dir, entry))
 
 def remove_images():
-    assert args.dest_dir != None, "use --dest_dir to show files to remove"
-
-    print('--- remove images ---')
+    if args.recursive:
+        args.recursive = False
+        for root, _, _ in os.walk(args.target_dir):
+            args.target_dir = root
+            remove_images()
+        return
 
     remove_dir = '/tmp/remove_images'
-    print('move images in {} from {} to {}'.format(args.dest_dir, args.target_dir, remove_dir))
+    print('--- remove images ---')
+    print('move images in {} to {}'.format(args.target_dir, remove_dir))
 
     os.makedirs(remove_dir, exist_ok=True)
-    for entry  in tqdm(os.listdir(args.dest_dir)):
-        symlink = '{}/{}'.format(args.dest_dir, entry)
+    for entry  in tqdm(os.listdir(args.target_dir)):
+        symlink = '{}/{}'.format(args.target_dir, entry)
         file = os.path.realpath(symlink)
         (name, ext) = os.path.splitext(file)
         if ext != '.png':
@@ -153,6 +163,7 @@ if __name__ == "__main__":
     parser.add_argument('--similar_groups', type=int, default=20, help='valid group count')
     parser.add_argument('--similar_threshold', type=float, default=0.1, help='treat as simialr images when value is smaller than this')
     parser.add_argument('--copy_count', type=int, default=10, help='file count to copy')
+    parser.add_argument('--recursive', action='store_true', help='copy or remove images under dest_dir recursively')
     args = parser.parse_args()
     print(args)
  
