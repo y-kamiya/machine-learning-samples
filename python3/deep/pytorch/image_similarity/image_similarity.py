@@ -480,6 +480,8 @@ if __name__ == "__main__":
     args.output_dir = '{}/output/{}'.format(args.dataroot, args.output_dir_name)
     args.tensorboard_log_dir = '{}/output/runs/{}'.format(args.dataroot, args.output_dir_name)
 
+    os.makedirs(args.output_dir, exist_ok=True)
+
     if args.log_file:
         filepath = '{}/default.log'.format(args.output_dir)
         logzero.logfile(filepath, disableStderrLogger=True)
@@ -496,8 +498,6 @@ if __name__ == "__main__":
 
     if args.analyze:
         args.crop_center = True
-
-    os.makedirs(args.output_dir, exist_ok=True)
 
     torch.manual_seed(args.seed)
 
