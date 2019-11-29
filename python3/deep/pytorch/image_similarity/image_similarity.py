@@ -501,6 +501,8 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
 
+    logger.info(args)
+
     if args.categorize is not None:
         Trainer.categorize_images(args)
         sys.exit()
