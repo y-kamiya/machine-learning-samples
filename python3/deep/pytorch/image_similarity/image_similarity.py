@@ -465,6 +465,7 @@ if __name__ == "__main__":
     parser.add_argument('--analyze', default='', help='image dir to get latent feature')
     parser.add_argument('--plot', action='store_true', help='plot latent features as 2-dimensional graph')
     parser.add_argument('--use-mnist', action='store_true', help='use mnist dataset')
+    parser.add_argument('--use-batch-norm', action='store_true', help='use batch normalization')
     parser.add_argument('--latent-feature', nargs='+', metavar='dirs...', help='get latent features of all images in dirs')
     parser.add_argument('--categorize', default=None, help='categorize images')
     parser.add_argument('--categorize_threshold', type=float, default=0.8, help='similarity threshold')
