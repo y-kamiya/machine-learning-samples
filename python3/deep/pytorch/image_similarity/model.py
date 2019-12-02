@@ -147,11 +147,11 @@ class AE_VGG(Base):
         dim = config.dim
 
         self.encoder = nn.Sequential(
-            self.__up(config.channel_size, 16, 2),
-            self.__up(16, 32, 2),
-            self.__up(32, 64, 3),
-            self.__up(64, 128, 3),
-            self.__up(128, 128, 3),
+            self.__down(config.channel_size, 16, 2),
+            self.__down(16, 32, 2),
+            self.__down(32, 64, 3),
+            self.__down(64, 128, 3),
+            self.__down(128, 128, 3),
         )
 
         h, w = self.__enc_output_dim()
@@ -163,11 +163,11 @@ class AE_VGG(Base):
         self.fcDec2 = nn.Linear(dim, hidden_dim)
         self.fcDec1 = nn.Linear(hidden_dim, enc_output_dim * 128)
 
-        self.down5 = self.__down(128, 128, 3)
-        self.down4 = self.__down(128, 64, 3)
-        self.down3 = self.__down(64, 32, 3)
-        self.down2 = self.__down(32, 16, 2)
-        self.down1 = self.__down(16, config.channel_size, 2, False)
+        self.down5 = self.__up(128, 128, 3)
+        self.down4 = self.__up(128, 64, 3)
+        self.down3 = self.__up(64, 32, 3)
+        self.down2 = self.__up(32, 16, 2)
+        self.down1 = self.__up(16, config.channel_size, 2, False)
 
     def __enc_output_dim(self):
         w = self.config.crop_width
@@ -179,7 +179,7 @@ class AE_VGG(Base):
 
         return (h, w)
 
-    def __up(self, input, output, n_layers):
+    def __down(self, input, output, n_layers):
         layers = []
         for i in range(n_layers):
             n_filters = input if i == 0 else output
@@ -192,7 +192,7 @@ class AE_VGG(Base):
 
         return nn.Sequential(*layers)
 
-    def __down(self, input, output, n_layers, activation=True):
+    def __up(self, input, output, n_layers, activation=True):
         layers = []
         for i in range(n_layers):
             n_filters = input if i != (n_layers - 1) else output
@@ -252,11 +252,11 @@ class VAE_VGG(Base):
         dim = config.dim
 
         self.encoder = nn.Sequential(
-            self.__up(config.channel_size, 16, 2),
-            self.__up(16, 32, 2),
-            self.__up(32, 64, 3),
-            self.__up(64, 128, 3),
-            self.__up(128, 128, 3),
+            self.__down(config.channel_size, 16, 2),
+            self.__down(16, 32, 2),
+            self.__down(32, 64, 3),
+            self.__down(64, 128, 3),
+            self.__down(128, 128, 3),
         )
 
         h, w = self.__enc_output_dim()
@@ -269,11 +269,11 @@ class VAE_VGG(Base):
         self.fcDec2 = nn.Linear(dim, hidden_dim)
         self.fcDec1 = nn.Linear(hidden_dim, enc_output_dim * 128)
 
-        self.down5 = self.__down(128, 128, 3)
-        self.down4 = self.__down(128, 64, 3)
-        self.down3 = self.__down(64, 32, 3)
-        self.down2 = self.__down(32, 16, 2)
-        self.down1 = self.__down(16, config.channel_size, 2, False)
+        self.down5 = self.__up(128, 128, 3)
+        self.down4 = self.__up(128, 64, 3)
+        self.down3 = self.__up(64, 32, 3)
+        self.down2 = self.__up(32, 16, 2)
+        self.down1 = self.__up(16, config.channel_size, 2, False)
 
     def __enc_output_dim(self):
         w = self.config.crop_width
@@ -285,7 +285,7 @@ class VAE_VGG(Base):
 
         return (h, w)
 
-    def __up(self, input, output, n_layers):
+    def __down(self, input, output, n_layers):
         layers = []
         for i in range(n_layers):
             n_filters = input if i == 0 else output
@@ -298,7 +298,7 @@ class VAE_VGG(Base):
 
         return nn.Sequential(*layers)
 
-    def __down(self, input, output, n_layers, activation=True):
+    def __up(self, input, output, n_layers, activation=True):
         layers = []
         for i in range(n_layers):
             n_filters = input if i != (n_layers - 1) else output
