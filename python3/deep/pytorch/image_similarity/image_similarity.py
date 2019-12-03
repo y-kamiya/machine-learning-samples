@@ -394,7 +394,7 @@ class Trainer():
                         data[paths[i]] = z[i]
 
             path = '{}/latent_feature.pickle'.format(args.output_dir)
-            if os.path.exist(path):
+            if os.path.exists(path):
                 timestamp = datetime.now().strftime('%s')
                 path = '{}/latent_feature_{}.pickle'.format(args.output_dir, timestamp)
 
