@@ -6,7 +6,8 @@ import argparse
 
 def extract_label():
     for file in os.listdir(args.target_dir):
-        label = file.rsplit('_', 1)[0]
+        labels = file.rsplit('_', 1)[0]
+        label = labels.split('@')[0]
         print(label)
 
 def classify_with_label():
