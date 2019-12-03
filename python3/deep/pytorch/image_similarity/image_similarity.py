@@ -505,6 +505,9 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     logger.info(args)
+    command_log_file = '{}/command.log'.format(args.output_dir)
+    command_logger = logzero.setup_logger(name='command_logger', logfile=command_log_file, disableStderrLogger=True)
+    command_logger.info(args)
 
     if args.categorize is not None:
         Trainer.categorize_images(args)
