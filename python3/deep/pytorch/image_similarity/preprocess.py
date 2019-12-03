@@ -11,8 +11,6 @@ from torchvision import transforms
 from PIL import Image, ImageFile
 import cv2
 
-PROCESSED_IMAGES_DIR = 'processed_images'
-
 def remove_duplicated_images():
     print('--- remove duplicated images ---')
 
@@ -85,6 +83,7 @@ def categorize_images():
 
 
 def transform_images():
+    assert args.dest_dir != None, "use --dest_dir to save processed images"
     print('--- transform images ---')
     list = [
         transforms.Grayscale(),
@@ -92,14 +91,13 @@ def transform_images():
     ]
     forms = transforms.Compose(list)
 
-    if not os.path.exists(PROCESSED_IMAGES_DIR):
-        os.mkdir(PROCESSED_IMAGES_DIR)
+    os.makedirs(args.dest_dir, exist_ok=True)
 
     for file in tqdm(file_map.values()):
         path = '{}/{}'.format(args.target_dir, file)
         image = Image.open(path)
 
-        forms(image).save('./{}/{}'.format(PROCESSED_IMAGES_DIR, file))
+        forms(image).save('./{}/{}'.format(args.dest_dir, file))
 
 def copy_images():
     assert args.dest_dir != None, "use --dest_dir to show files to remove"
