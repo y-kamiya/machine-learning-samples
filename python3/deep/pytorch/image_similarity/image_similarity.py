@@ -116,12 +116,14 @@ class Trainer():
         self.test_loader = self.__create_loader('test')
 
     def __enumerate_loader(self, loader):
+        device = self.config.device
         if self.config.use_mnist:
             for i, (data, label) in enumerate(loader):
-                yield (i, {'data':data, 'label':label})
+                yield (i, {'data':data.to(device), 'label':label})
         else:
-            for i, dict in enumerate(loader):
-                yield (i, dict)
+            for i, batch in enumerate(loader):
+                batch['data'] = batch['data'].to(device)
+                yield (i, batch)
 
     def __create_loader(self, phase):
         config = self.config
@@ -206,7 +208,7 @@ class Trainer():
         train_loss = 0
         train_loss_mse = 0
         for batch_idx, batch in self.__enumerate_loader(self.train_loader):
-            data = batch['data'].to(self.config.device)
+            data = batch['data']
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(self.__create_input(data))
 
@@ -239,7 +241,7 @@ class Trainer():
         test_loss_mse = 0
         with torch.no_grad():
             for i, batch in self.__enumerate_loader(self.test_loader):
-                data = batch['data'].to(self.config.device)
+                data = batch['data']
                 recon_batch, mu, logvar = self.model(data)
 
                 test_loss += self.__loss_function(recon_batch, data, mu, logvar).item()
