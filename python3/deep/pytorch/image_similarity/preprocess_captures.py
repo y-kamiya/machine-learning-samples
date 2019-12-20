@@ -84,8 +84,8 @@ def extract_node_image():
                 path = '{}/{}'.format(args.target_dir, images[hash])
                 if os.path.exists(path):
                     image = cv2.imread(path)
-                    dir = '{}/processed/'.format(args.target_dir)
-                    shutil.move(path, dir)
+                    # dir = '{}/processed/'.format(args.target_dir)
+                    # shutil.move(path, dir)
 
             if image is None:
                 continue
@@ -96,29 +96,45 @@ def extract_node_image():
             h = int(entry[4])
             label = entry[5].split('@')[0]
 
+            os.makedirs('{}/node/{}'.format(args.target_dir, 'raw'), exist_ok=True)
+            os.makedirs('{}/node/{}'.format(args.target_dir, 'crop'), exist_ok=True)
+            os.makedirs('{}/node/{}'.format(args.target_dir, 'wide'), exist_ok=True)
+
             height, width, _ = image.shape
             cv_y = height - y
             save_image(image[cv_y-h:cv_y, x:x+w], label, 'raw')
-            # save_image(image[cv_y-h:cv_y-h//2, x:x+w//2], label)
-            # save_image(image[cv_y-h:cv_y-h//2, x+w//2:x+w], label)
-            # save_image(image[cv_y-h//2:cv_y, x:x+w//2], label)
-            # save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label)
-            # save_image(image[cv_y-h*3//4:cv_y-h//4, x+w//4:x+w*3//4], label)
-            if h < 240 and w < 420:
-                save_image(image[cv_y-h-12:cv_y+12, x-21:x+w+21], label, 'wide')
+            if h < 576 and w < 1024:
+                # 20%外側も含める
+                _h = int(h * 0.2)
+                _w = int(w * 0.2)
+                y_from = max(0, cv_y - h - _h)
+                y_to = min(cv_y + _h, 720)
+                x_from = max(0, x - _w)
+                x_to = min(x + w + _w, 1280)
+                save_image(image[y_from:y_to, x_from:x_to], label, 'wide')
             if 800 < w:
+                # 横に半分
                 save_image(image[cv_y-h:cv_y, x:x+w//2], label, 'crop')
                 save_image(image[cv_y-h:cv_y, x+w//2:x+w], label, 'crop')
             if 600 < h:
+                # 縦に半分
                 save_image(image[cv_y-h:cv_y-h//2, x:x+w], label, 'crop')
                 save_image(image[cv_y-h//2:cv_y-h, x:x+w], label, 'crop')
             if 800 < w and 600 < h:
+                # 中央
                 save_image(image[cv_y-h*3//4:cv_y-h//4, x+w//4:x+w*3//4], label, 'crop')
+            if 1280 <= w and 720 <= w:
+                # 全画面の場合は４分割も
+                save_image(image[cv_y-h:cv_y-h//2, x:x+w//2], label, 'crop')
+                save_image(image[cv_y-h:cv_y-h//2, x+w//2:x+w], label, 'crop')
+                save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop')
+                save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
+
 
 def save_image(image, label, dir):
     hash = hashlib.md5(image.tobytes()).hexdigest()
     path = '{}/node/{}/{}_{}.jpg'.format(args.target_dir, dir, label, hash)
-    cv2.imwrite(path, image)
+    cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 
 if __name__ == "__main__":
