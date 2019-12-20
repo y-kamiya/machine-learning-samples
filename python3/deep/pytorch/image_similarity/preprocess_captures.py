@@ -28,6 +28,22 @@ def classify_with_label():
         if count < args.count:
             shutil.copyfile(path, '{}/{}'.format(label_dir, file))
 
+def create_grayscale_images():
+    assert args.dest_dir != None, "use --dest_dir to save processed images"
+    print('--- grayscale images ---')
+
+    os.makedirs(args.dest_dir, exist_ok=True)
+
+    for file in tqdm(os.listdir(args.target_dir)):
+        (name, ext) = os.path.splitext(file)
+        if ext not in ['.png', '.jpg']:
+            continue
+
+        path = '{}/{}'.format(args.target_dir, file)
+        image = cv2.imread(path)
+        image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite('{}/{}'.format(args.dest_dir, file), image_gray)
+
 def create_csv():
     output_file = '{}/labels.csv'.format(args.target_dir)
     target_dir_abs = os.path.realpath(args.target_dir)
@@ -111,6 +127,7 @@ if __name__ == "__main__":
     parser.add_argument('--extract_label', action='store_true', help='extract label')
     parser.add_argument('--extract_node_image', action='store_true', help='extract image from screenshot')
     parser.add_argument('--classify_with_label', action='store_true', help='classify images with label in file name')
+    parser.add_argument('--grayscale', action='store_true', help='get grayscale images')
     parser.add_argument('--csv', action='store_true', help='create csv file including map between images and labels')
     parser.add_argument('--count', type=int, default=10, help='file count to process')
     parser.add_argument('--target_label', default=None, help='label to process')
@@ -128,6 +145,10 @@ if __name__ == "__main__":
 
     if args.classify_with_label:
         classify_with_label()
+        sys.exit()
+
+    if args.grayscale:
+        create_grayscale_images()
         sys.exit()
 
     if args.csv:
