@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 def extract_label():
     for file in os.listdir(args.target_dir):
-        labels = file.rsplit('_', 1)[0]
+        labels = file.rsplit('@', 1)[0]
         label = labels.split('@')[0]
         print(label)
 
@@ -49,7 +49,7 @@ def create_csv():
     target_dir_abs = os.path.realpath(args.target_dir)
     data = []
     for file in os.listdir(args.target_dir):
-        labels = file.rsplit('_', 1)[0]
+        labels = file.rsplit('@', 1)[0]
         labels = labels.replace('@', ',')
         path = '{}/{}'.format(target_dir_abs, file)
         data.append('{},{}'.format(path, labels))
@@ -130,10 +130,9 @@ def extract_node_image():
                 save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop')
                 save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
 
-
 def save_image(image, label, dir):
     hash = hashlib.md5(image.tobytes()).hexdigest()
-    path = '{}/node/{}/{}_{}.jpg'.format(args.target_dir, dir, label, hash)
+    path = '{}/node/{}/{}@{}.jpg'.format(args.target_dir, dir, label, hash)
     cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 
