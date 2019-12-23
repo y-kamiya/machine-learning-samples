@@ -135,6 +135,48 @@ def save_image(image, label, dir):
     path = '{}/node/{}/{}@{}.jpg'.format(args.target_dir, dir, label, hash)
     cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
+def convert_to_imagenet_structure():
+    assert args.dest_dir != None, "use --dest_dir to show directory to put images"
+
+    train_dir = os.path.join(args.dest_dir, 'train')
+    if os.path.isdir(train_dir):
+        print('dest_dir has already exist')
+        return
+
+    os.makedirs(train_dir, exist_ok=True)
+
+    for file in tqdm(os.listdir(args.target_dir)):
+        (_, ext) = os.path.splitext(file)
+        if ext not in ['.png', '.jpg']:
+            continue
+        labels = file.rsplit('@', 1)[0]
+        label = labels.split('@')[0]
+        label_dir = '{}/{}'.format(train_dir, label)
+        os.makedirs(label_dir, exist_ok=True)
+        path = '{}/{}'.format(args.target_dir, file)
+        shutil.copyfile(path, '{}/{}'.format(label_dir, file))
+
+    if args.validation_ratio == None:
+        return
+
+    label_file = os.path.join(args.dest_dir, 'synset_labels.txt')
+    with open(label_file, 'w') as f:
+        val_dir = os.path.join(args.dest_dir, 'validation')
+        os.makedirs(val_dir, exist_ok=True)
+        for label in tqdm(os.listdir(train_dir)):
+            label_dir = '{}/{}'.format(train_dir, label)
+            if not os.path.isdir(label_dir):
+                continue
+            count = int(len([f for f in os.listdir(label_dir)]) * args.validation_ratio)
+            for i, file in enumerate(os.listdir(label_dir)):
+                if count <= i:
+                    break
+                src = os.path.join(label_dir, file)
+                tgt = os.path.join(val_dir, file)
+                shutil.move(src, tgt)
+
+            text = [label for _ in range(count)]
+            f.write('\n'.join(text) + '\n')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
@@ -147,6 +189,8 @@ if __name__ == "__main__":
     parser.add_argument('--count', type=int, default=10, help='file count to process')
     parser.add_argument('--target_label', default=None, help='label to process')
     parser.add_argument('--dest_dir', default=None, help='destination directory')
+    parser.add_argument('--convert_imagenet', action='store_true', help='convert directory structure like imagenet')
+    parser.add_argument('--validation_ratio', type=float, default=None, help='ratio of validation images')
     args = parser.parse_args()
     print(args)
 
@@ -168,5 +212,9 @@ if __name__ == "__main__":
 
     if args.csv:
         create_csv()
+        sys.exit()
+
+    if args.convert_imagenet:
+        convert_to_imagenet_structure()
         sys.exit()
 
