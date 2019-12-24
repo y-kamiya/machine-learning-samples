@@ -23,6 +23,13 @@ def parse_filename(path):
 
 
 def extract_label():
+    if is_ext(args.target_dir, '.csv'):
+        with open(args.target_dir) as f:
+            reader = csv.reader(f)
+            for entry in tqdm(reader):
+                print(entry[5].split('@')[0])
+        sys.exit()
+
     for file in os.listdir(args.target_dir):
         if is_ext(file, '.jpg'):
             parsed = parse_filename(file)
@@ -194,7 +201,6 @@ def convert_to_imagenet_structure():
 
             text = [label for _ in range(count)]
             f.write('\n'.join(text) + '\n')
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
