@@ -6,6 +6,7 @@ import argparse
 import csv
 import cv2
 import hashlib
+import random
 from tqdm import tqdm
 
 # utils
@@ -26,7 +27,7 @@ def extract_label():
     if is_ext(args.target_dir, '.csv'):
         with open(args.target_dir) as f:
             reader = csv.reader(f)
-            for entry in tqdm(reader):
+            for entry in reader:
                 print(entry[5].split('@')[0])
         sys.exit()
 
@@ -98,7 +99,7 @@ def extract_node_image():
     with open(node_data_file) as f:
         reader = csv.reader(f)
         current_hash = ''
-        for entry in tqdm(reader):
+        for entry in tqdm(list(reader)):
             hash = entry[0]
             if hash not in images:
                 continue
@@ -202,6 +203,37 @@ def convert_to_imagenet_structure():
             text = [label for _ in range(count)]
             f.write('\n'.join(text) + '\n')
 
+def create_node_uniq():
+    assert is_ext(args.target_dir, '.csv'), 'pass csv file that has node positions'
+    assert os.path.exists(args.target_dir), 'target file is not found'
+
+    with open(args.target_dir) as f:
+        reader = csv.reader(f)
+
+        map_uniq = {}
+        map_index = {}
+        for index, entry in enumerate(reader):
+            str = ','.join(entry)
+            if str in map_uniq:
+                continue
+            map_uniq[str] = index
+
+            label = entry[5].split('@')[0]
+            if label not in map_index:
+                map_index[label] = []
+            map_index[label].append(index)
+
+    map_uniq_reversed = {v:k for k,v in map_uniq.items()}
+    dir = os.path.dirname(args.target_dir)
+    output_file = os.path.join(dir, 'node_uniq.csv')
+    with open(output_file, 'w') as f:
+        for indexes in map_index.values():
+            samples = random.sample(indexes, min(len(indexes), args.count))
+            for index in samples:
+                f.write(map_uniq_reversed[index])
+                f.write('\n')
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('target_dir', help='target image directory path')
@@ -215,6 +247,7 @@ if __name__ == "__main__":
     parser.add_argument('--dest_dir', default=None, help='destination directory')
     parser.add_argument('--convert_imagenet', action='store_true', help='convert directory structure like imagenet')
     parser.add_argument('--validation_ratio', type=float, default=None, help='ratio of validation images')
+    parser.add_argument('--create_node_uniq', action='store_true', help='create node_uniq.csv')
     args = parser.parse_args()
     print(args)
 
@@ -240,5 +273,9 @@ if __name__ == "__main__":
 
     if args.convert_imagenet:
         convert_to_imagenet_structure()
+        sys.exit()
+
+    if args.create_node_uniq:
+        create_node_uniq()
         sys.exit()
 
