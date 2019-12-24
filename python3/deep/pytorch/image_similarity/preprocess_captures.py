@@ -21,7 +21,7 @@ def classify_with_label():
     target = '{}/{}*'.format(args.target_dir, args.target_label)
     for path in glob.glob(target):
         file = os.path.basename(path)
-        label = file.rsplit('_', 1)[0]
+        label = file.rsplit('@', 1)[0]
         label_dir = '{}/{}'.format(args.dest_dir, label)
         os.makedirs(label_dir, exist_ok=True)
         count = len([f for f in os.listdir(label_dir)]) 
@@ -70,6 +70,11 @@ def extract_node_image():
         images[hash] = file
 
     node_data_file = '{}/node_uniq.csv'.format(args.target_dir)
+
+    os.makedirs('{}/node/{}'.format(args.target_dir, 'raw'), exist_ok=True)
+    os.makedirs('{}/node/{}'.format(args.target_dir, 'crop'), exist_ok=True)
+    os.makedirs('{}/node/{}'.format(args.target_dir, 'wide'), exist_ok=True)
+
     with open(node_data_file) as f:
         reader = csv.reader(f)
         current_hash = ''
@@ -95,10 +100,6 @@ def extract_node_image():
             w = int(entry[3])
             h = int(entry[4])
             label = entry[5].split('@')[0]
-
-            os.makedirs('{}/node/{}'.format(args.target_dir, 'raw'), exist_ok=True)
-            os.makedirs('{}/node/{}'.format(args.target_dir, 'crop'), exist_ok=True)
-            os.makedirs('{}/node/{}'.format(args.target_dir, 'wide'), exist_ok=True)
 
             height, width, _ = image.shape
             cv_y = height - y
@@ -130,9 +131,13 @@ def extract_node_image():
                 save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop')
                 save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
 
-def save_image(image, label, dir):
+def save_image(image, label, type):
+    label_dir = os.path.join(args.target_dir, 'node', type, label)
+    if not os.path.exists(label_dir):
+        os.makedirs(label_dir, exist_ok=True)
+
     hash = hashlib.md5(image.tobytes()).hexdigest()
-    path = '{}/node/{}/{}@{}.jpg'.format(args.target_dir, dir, label, hash)
+    path = '{}/{}@{}.jpg'.format(label_dir, label, hash)
     cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 def convert_to_imagenet_structure():
