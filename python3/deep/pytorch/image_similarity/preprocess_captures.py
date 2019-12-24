@@ -8,11 +8,25 @@ import cv2
 import hashlib
 from tqdm import tqdm
 
+# utils
+def is_ext(path, ext):
+    _, str = os.path.splitext(os.path.basename(path))
+    return str == ext
+
+def parse_filename(path):
+    file = os.path.basename(path)
+    name, _ = os.path.splitext(file)
+    parts = name.rsplit('@', 1)
+    labels = parts[0].split('@')
+    return {'hash':parts[1], 'labels':labels, 'file':file}
+
+
+
 def extract_label():
     for file in os.listdir(args.target_dir):
-        labels = file.rsplit('@', 1)[0]
-        label = labels.split('@')[0]
-        print(label)
+        if is_ext(file, '.jpg'):
+            parsed = parse_filename(file)
+            print(parsed['labels'][0])
 
 def classify_with_label():
     assert args.target_label != None, "use --target_label to glob files"
@@ -20,13 +34,13 @@ def classify_with_label():
 
     target = '{}/{}*'.format(args.target_dir, args.target_label)
     for path in glob.glob(target):
-        file = os.path.basename(path)
-        label = file.rsplit('@', 1)[0]
+        parsed = parse_filename(file)
+        label = parsed['labels'][0]
         label_dir = '{}/{}'.format(args.dest_dir, label)
         os.makedirs(label_dir, exist_ok=True)
         count = len([f for f in os.listdir(label_dir)]) 
         if count < args.count:
-            shutil.copyfile(path, '{}/{}'.format(label_dir, file))
+            shutil.copyfile(path, '{}/{}'.format(label_dir, parsed['file']))
 
 def create_grayscale_images():
     assert args.dest_dir != None, "use --dest_dir to save processed images"
@@ -35,8 +49,7 @@ def create_grayscale_images():
     os.makedirs(args.dest_dir, exist_ok=True)
 
     for file in tqdm(os.listdir(args.target_dir)):
-        (name, ext) = os.path.splitext(file)
-        if ext not in ['.png', '.jpg']:
+        if is_ext(file, '.jpg') or is_ext(file, '.png'):
             continue
 
         path = '{}/{}'.format(args.target_dir, file)
@@ -49,8 +62,8 @@ def create_csv():
     target_dir_abs = os.path.realpath(args.target_dir)
     data = []
     for file in os.listdir(args.target_dir):
-        labels = file.rsplit('@', 1)[0]
-        labels = labels.replace('@', ',')
+        parsed = parse_filename(file)
+        labels = parsed['labels'].replace('@', ',')
         path = '{}/{}'.format(target_dir_abs, file)
         data.append('{},{}'.format(path, labels))
     
@@ -151,11 +164,10 @@ def convert_to_imagenet_structure():
     os.makedirs(train_dir, exist_ok=True)
 
     for file in tqdm(os.listdir(args.target_dir)):
-        (_, ext) = os.path.splitext(file)
-        if ext not in ['.png', '.jpg']:
+        if not is_ext(file, '.jpg') and not is_ext(file, '.png'):
             continue
-        labels = file.rsplit('@', 1)[0]
-        label = labels.split('@')[0]
+        parsed = parse_filename(file)
+        label = parsed['labels'][0]
         label_dir = '{}/{}'.format(train_dir, label)
         os.makedirs(label_dir, exist_ok=True)
         path = '{}/{}'.format(args.target_dir, file)
@@ -182,6 +194,7 @@ def convert_to_imagenet_structure():
 
             text = [label for _ in range(count)]
             f.write('\n'.join(text) + '\n')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
