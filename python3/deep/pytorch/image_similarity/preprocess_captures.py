@@ -7,6 +7,7 @@ import csv
 import cv2
 import hashlib
 import random
+import numpy as np
 from tqdm import tqdm
 
 # utils
@@ -150,6 +151,34 @@ def extract_node_image():
                 save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop')
                 save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
 
+def augmentation():
+    assert args.aug_label != None, "use --aug_label to show class to apply augmentation"
+
+    dest_dir = os.path.join(args.target_dir, 'node', 'aug')
+    os.makedirs(dest_dir, exist_ok=True)
+
+    for type in ['raw', 'wide']:
+        src_dir = os.path.join(args.target_dir, 'node', type, args.aug_label)
+        augmentation_gamma(src_dir)
+
+
+def augmentation_gamma(src_dir):
+    assert args.aug_label != None, "use --aug_label to show class to apply augmentation"
+
+    if not os.path.exists(src_dir):
+        return
+
+    for file in os.listdir(src_dir):
+        image = cv2.imread(os.path.join(src_dir, file))
+        gammas = [round(i * 0.1, 1) for i in range(1, 20, 2)]
+        for gamma in gammas:
+            gamma_cvt = np.zeros((256,1),dtype = 'uint8')
+            for i in range(256):
+                gamma_cvt[i][0] = 255 * (float(i)/255) ** (1.0/gamma)
+            im = cv2.LUT(image, gamma_cvt)
+
+            save_image(im, args.aug_label, 'aug')
+
 def save_image(image, label, type):
     label_dir = os.path.join(args.target_dir, 'node', type, label)
     if not os.path.exists(label_dir):
@@ -246,6 +275,8 @@ if __name__ == "__main__":
     parser.add_argument('--convert_imagenet', action='store_true', help='convert directory structure like imagenet')
     parser.add_argument('--validation_ratio', type=float, default=None, help='ratio of validation images')
     parser.add_argument('--create_node_uniq', action='store_true', help='create node_uniq.csv')
+    parser.add_argument('--augmentation', action='store_true', help='execute data augmentation')
+    parser.add_argument('--aug_label', default=None, help='class name to apply augmentation')
     args = parser.parse_args()
     print(args)
 
@@ -275,5 +306,9 @@ if __name__ == "__main__":
 
     if args.create_node_uniq:
         create_node_uniq()
+        sys.exit()
+
+    if args.augmentation:
+        augmentation()
         sys.exit()
 
