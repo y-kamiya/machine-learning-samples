@@ -79,8 +79,10 @@ def create_csv():
         f.write('\n'.join(data))
 
 def extract_node_image():
+    node_data_file = os.path.join(args.target_dir, args.extract_node_image)
+    assert os.path.exists(node_data_file), "wrong file is passed to --extract_node_image"
+
     os.makedirs('{}/node'.format(args.target_dir), exist_ok=True)
-    os.makedirs('{}/processed'.format(args.target_dir), exist_ok=True)
 
     images = {}
     for file in os.listdir(args.target_dir):
@@ -89,8 +91,6 @@ def extract_node_image():
             continue
         hash = splited[0].split('_')[1]
         images[hash] = file
-
-    node_data_file = '{}/node_uniq.csv'.format(args.target_dir)
 
     os.makedirs('{}/node/{}'.format(args.target_dir, 'raw'), exist_ok=True)
     os.makedirs('{}/node/{}'.format(args.target_dir, 'crop'), exist_ok=True)
@@ -110,8 +110,6 @@ def extract_node_image():
                 path = '{}/{}'.format(args.target_dir, images[hash])
                 if os.path.exists(path):
                     image = cv2.imread(path)
-                    # dir = '{}/processed/'.format(args.target_dir)
-                    # shutil.move(path, dir)
 
             if image is None:
                 continue
@@ -238,7 +236,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('target_dir', help='target image directory path')
     parser.add_argument('--extract_label', action='store_true', help='extract label')
-    parser.add_argument('--extract_node_image', action='store_true', help='extract image from screenshot')
+    parser.add_argument('--extract_node_image', default=None, help='extract image from screenshot according to csv')
     parser.add_argument('--classify_with_label', action='store_true', help='classify images with label in file name')
     parser.add_argument('--grayscale', action='store_true', help='get grayscale images')
     parser.add_argument('--csv', action='store_true', help='create csv file including map between images and labels')
@@ -255,7 +253,7 @@ if __name__ == "__main__":
         extract_label()
         sys.exit()
 
-    if args.extract_node_image:
+    if args.extract_node_image != None:
         extract_node_image()
         sys.exit()
 
