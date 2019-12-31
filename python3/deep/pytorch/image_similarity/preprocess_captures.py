@@ -32,8 +32,10 @@ def extract_label():
                 print(entry[5].split('@')[0])
         sys.exit()
 
-    for file in os.listdir(args.target_dir):
-        if is_ext(file, '.jpg'):
+    for root, dirs, files in os.walk(args.target_dir):
+        for file in files:
+            if not is_ext(file, '.jpg'):
+                continue
             parsed = parse_filename(file)
             print(parsed['labels'][0])
 
@@ -124,7 +126,7 @@ def extract_node_image():
             height, width, _ = image.shape
             cv_y = height - y
             save_image(image[cv_y-h:cv_y, x:x+w], label, 'raw')
-            if h < 576 and w < 1024:
+            if h < 720 and w < 1280:
                 # 20%外側も含める
                 _h = int(h * 0.2)
                 _w = int(w * 0.2)
