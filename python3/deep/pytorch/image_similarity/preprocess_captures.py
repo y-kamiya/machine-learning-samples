@@ -154,32 +154,63 @@ def extract_node_image():
                 save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
 
 def augmentation():
-    assert args.aug_label != None, "use --aug_label to show class to apply augmentation"
+    assert args.target_label != None, "use --target_label to show class to apply augmentation"
+    assert args.augmentation in ['gamma', 'resize'], "use --target_label to show class to apply augmentation"
 
-    dest_dir = os.path.join(args.target_dir, 'node', 'aug')
-    os.makedirs(dest_dir, exist_ok=True)
+    dest_dir = os.path.join(args.target_dir, 'node', 'aug_' + args.augmentation)
 
-    for type in ['raw', 'wide']:
-        src_dir = os.path.join(args.target_dir, 'node', type, args.aug_label)
-        augmentation_gamma(src_dir)
+    labels = [args.target_label]
+    if os.path.exists(args.target_label):
+        with open(args.target_label, 'r') as f:
+            content = f.read()
+            labels = content.split('\n')
+            labels.pop(-1)
 
+    for label in tqdm(labels):
+        src_dir = os.path.join(args.target_dir, 'node', label)
+        if not os.path.exists(src_dir):
+            continue
 
-def augmentation_gamma(src_dir):
-    assert args.aug_label != None, "use --aug_label to show class to apply augmentation"
+        if args.augmentation == 'gamma':
+            augmentation_gamma(src_dir, dest_dir, label)
+        elif args.augmentation == 'resize':
+            augmentation_resize(src_dir, dest_dir, label)
 
-    if not os.path.exists(src_dir):
-        return
+def augmentation_gamma(src_dir, dest_dir, label):
+    assert args.target_label != None, "use --target_label to show class to apply augmentation"
+
+    gammas = [round(i * 0.1, 1) for i in range(7, 14, 2)]
 
     for file in os.listdir(src_dir):
         image = cv2.imread(os.path.join(src_dir, file))
-        gammas = [round(i * 0.1, 1) for i in range(1, 20, 2)]
+        if image is None:
+            continue
         for gamma in gammas:
             gamma_cvt = np.zeros((256,1),dtype = 'uint8')
             for i in range(256):
                 gamma_cvt[i][0] = 255 * (float(i)/255) ** (1.0/gamma)
             im = cv2.LUT(image, gamma_cvt)
 
-            save_image(im, args.aug_label, 'aug')
+            save_image(im, label, os.path.basename(dest_dir))
+
+def augmentation_resize(src_dir, dest_dir, label):
+    assert args.target_label != None, "use --target_label to show class to apply augmentation"
+
+    ratios = [0.5, 0.75, 1.25, 1.5]
+
+    for file in os.listdir(src_dir):
+        image = cv2.imread(os.path.join(src_dir, file))
+        if image is None:
+            continue
+        h, w, _ = image.shape
+
+        for r in ratios:
+            _w, _h = int(w * r), int(h * r)
+            if _w < 30 or _h < 30:
+                continue
+            im = cv2.resize(image, (_w, _h), interpolation=cv2.INTER_CUBIC)
+
+            save_image(im, label, os.path.basename(dest_dir))
 
 def save_image(image, label, type):
     label_dir = os.path.join(args.target_dir, 'node', type, label)
@@ -277,8 +308,7 @@ if __name__ == "__main__":
     parser.add_argument('--convert_imagenet', action='store_true', help='convert directory structure like imagenet')
     parser.add_argument('--validation_ratio', type=float, default=None, help='ratio of validation images')
     parser.add_argument('--create_node_uniq', action='store_true', help='create node_uniq.csv')
-    parser.add_argument('--augmentation', action='store_true', help='execute data augmentation')
-    parser.add_argument('--aug_label', default=None, help='class name to apply augmentation')
+    parser.add_argument('--augmentation', default=None, help='caugmentation type: gamma, resize')
     args = parser.parse_args()
     print(args)
 
@@ -310,7 +340,7 @@ if __name__ == "__main__":
         create_node_uniq()
         sys.exit()
 
-    if args.augmentation:
+    if args.augmentation != None:
         augmentation()
         sys.exit()
 
