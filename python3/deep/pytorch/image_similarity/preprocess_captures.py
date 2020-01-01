@@ -95,9 +95,10 @@ def extract_node_image():
         hash = splited[0].split('_')[1]
         images[hash] = file
 
-    os.makedirs('{}/node/{}'.format(args.target_dir, 'raw'), exist_ok=True)
-    os.makedirs('{}/node/{}'.format(args.target_dir, 'crop'), exist_ok=True)
-    os.makedirs('{}/node/{}'.format(args.target_dir, 'wide'), exist_ok=True)
+    dest_dir = os.path.join(args.target_dir, 'node')
+    os.makedirs(os.path.join(dest_dir, 'raw'), exist_ok=True)
+    os.makedirs(os.path.join(dest_dir, 'crop'), exist_ok=True)
+    os.makedirs(os.path.join(dest_dir, 'wide'), exist_ok=True)
 
     with open(node_data_file) as f:
         reader = csv.reader(f)
@@ -125,7 +126,7 @@ def extract_node_image():
 
             height, width, _ = image.shape
             cv_y = height - y
-            save_image(image[cv_y-h:cv_y, x:x+w], label, 'raw')
+            save_image(image[cv_y-h:cv_y, x:x+w], label, 'raw', dest_dir)
             if h < 720 and w < 1280:
                 # 20%外側も含める
                 _h = int(h * 0.2)
@@ -134,24 +135,24 @@ def extract_node_image():
                 y_to = min(cv_y + _h, 720)
                 x_from = max(0, x - _w)
                 x_to = min(x + w + _w, 1280)
-                save_image(image[y_from:y_to, x_from:x_to], label, 'wide')
+                save_image(image[y_from:y_to, x_from:x_to], label, 'wide', dest_dir)
             if 800 < w:
                 # 横に半分
-                save_image(image[cv_y-h:cv_y, x:x+w//2], label, 'crop')
-                save_image(image[cv_y-h:cv_y, x+w//2:x+w], label, 'crop')
+                save_image(image[cv_y-h:cv_y, x:x+w//2], label, 'crop', dest_dir)
+                save_image(image[cv_y-h:cv_y, x+w//2:x+w], label, 'crop', dest_dir)
             if 600 < h:
                 # 縦に半分
-                save_image(image[cv_y-h:cv_y-h//2, x:x+w], label, 'crop')
-                save_image(image[cv_y-h//2:cv_y-h, x:x+w], label, 'crop')
+                save_image(image[cv_y-h:cv_y-h//2, x:x+w], label, 'crop', dest_dir)
+                save_image(image[cv_y-h//2:cv_y-h, x:x+w], label, 'crop', dest_dir)
             if 800 < w and 600 < h:
                 # 中央
-                save_image(image[cv_y-h*3//4:cv_y-h//4, x+w//4:x+w*3//4], label, 'crop')
+                save_image(image[cv_y-h*3//4:cv_y-h//4, x+w//4:x+w*3//4], label, 'crop', dest_dir)
             if 1280 <= w and 720 <= w:
                 # 全画面の場合は４分割も
-                save_image(image[cv_y-h:cv_y-h//2, x:x+w//2], label, 'crop')
-                save_image(image[cv_y-h:cv_y-h//2, x+w//2:x+w], label, 'crop')
-                save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop')
-                save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop')
+                save_image(image[cv_y-h:cv_y-h//2, x:x+w//2], label, 'crop', dest_dir)
+                save_image(image[cv_y-h:cv_y-h//2, x+w//2:x+w], label, 'crop', dest_dir)
+                save_image(image[cv_y-h//2:cv_y, x:x+w//2], label, 'crop', dest_dir)
+                save_image(image[cv_y-h//2:cv_y, x+w//2:x+w], label, 'crop', dest_dir)
 
 def augmentation():
     assert args.target_label != None, "use --target_label to show class to apply augmentation"
@@ -167,14 +168,16 @@ def augmentation():
             labels.pop(-1)
 
     for label in tqdm(labels):
-        src_dir = os.path.join(args.target_dir, 'node', label)
-        if not os.path.exists(src_dir):
-            continue
+        src_dirs = []
+        for root, dirs, _ in os.walk(args.target_dir):
+            if label in dirs:
+                src_dirs.append(os.path.join(root, label))
 
-        if args.augmentation == 'gamma':
-            augmentation_gamma(src_dir, dest_dir, label)
-        elif args.augmentation == 'resize':
-            augmentation_resize(src_dir, dest_dir, label)
+        for src_dir in src_dirs:
+            if args.augmentation == 'gamma':
+                augmentation_gamma(src_dir, dest_dir, label)
+            elif args.augmentation == 'resize':
+                augmentation_resize(src_dir, dest_dir, label)
 
 def augmentation_gamma(src_dir, dest_dir, label):
     assert args.target_label != None, "use --target_label to show class to apply augmentation"
@@ -212,13 +215,17 @@ def augmentation_resize(src_dir, dest_dir, label):
 
             save_image(im, label, os.path.basename(dest_dir))
 
-def save_image(image, label, type):
-    label_dir = os.path.join(args.target_dir, 'node', type, label)
-    if not os.path.exists(label_dir):
-        os.makedirs(label_dir, exist_ok=True)
+def save_image(image, label, type, dest_dir=None):
+    if dest_dir == None:
+        dest_dir = os.path.join(args.target_dir, type, label)
+    else:
+        dest_dir = os.path.join(dest_dir, type, label)
+
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir, exist_ok=True)
 
     hash = hashlib.md5(image.tobytes()).hexdigest()
-    path = '{}/{}@{}.jpg'.format(label_dir, label, hash)
+    path = '{}/{}@{}.jpg'.format(dest_dir, label, hash)
     cv2.imwrite(path, image, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 def convert_to_imagenet_structure():
