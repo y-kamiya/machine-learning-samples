@@ -9,6 +9,7 @@ import hashlib
 import random
 import numpy as np
 from tqdm import tqdm
+import imghdr
 
 # utils
 def is_ext(path, ext):
@@ -300,6 +301,13 @@ def create_node_uniq():
                 f.write(map_uniq_reversed[index])
                 f.write('\n')
 
+def check_jpg():
+    for root, _, files in os.walk(args.target_dir):
+        for file in files:
+            path = os.path.join(root, file)
+            type = imghdr.what(path)
+            if type == None:
+                print(path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
@@ -316,6 +324,7 @@ if __name__ == "__main__":
     parser.add_argument('--validation_ratio', type=float, default=None, help='ratio of validation images')
     parser.add_argument('--create_node_uniq', action='store_true', help='create node_uniq.csv')
     parser.add_argument('--augmentation', default=None, help='caugmentation type: gamma, resize')
+    parser.add_argument('--check_jpg', action='store_true', help='check if jpg images exist')
     args = parser.parse_args()
     print(args)
 
@@ -349,5 +358,9 @@ if __name__ == "__main__":
 
     if args.augmentation != None:
         augmentation()
+        sys.exit()
+
+    if args.check_jpg:
+        check_jpg()
         sys.exit()
 
