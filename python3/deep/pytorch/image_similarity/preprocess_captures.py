@@ -71,13 +71,16 @@ def create_grayscale_images():
 
 def create_csv():
     output_file = '{}/labels.csv'.format(args.target_dir)
-    target_dir_abs = os.path.realpath(args.target_dir)
     data = []
-    for file in os.listdir(args.target_dir):
-        parsed = parse_filename(file)
-        labels = parsed['labels'].replace('@', ',')
-        path = '{}/{}'.format(target_dir_abs, file)
-        data.append('{},{}'.format(path, labels))
+    for root, _, files in os.walk(args.target_dir):
+        target_dir_abs = os.path.realpath(root)
+        for file in files:
+            if not is_ext(file, '.jpg'):
+                continue
+            parsed = parse_filename(file)
+            labels = parsed['labels'][0].replace('@', ',')
+            path = '{}/{}'.format(target_dir_abs, file)
+            data.append('{},{}'.format(path, labels))
     
     with open(output_file, mode='w') as f:
         f.write('\n'.join(data))
