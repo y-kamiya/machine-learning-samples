@@ -162,14 +162,14 @@ def augmentation():
     assert args.target_label != None, "use --target_label to show class to apply augmentation"
     assert args.augmentation in ['gamma', 'resize'], "use --target_label to show class to apply augmentation"
 
-    dest_dir = os.path.join(args.target_dir, 'node', 'aug_' + args.augmentation)
+    dest_dir = os.path.join(args.target_dir, '..', 'aug_' + args.augmentation)
 
     labels = [args.target_label]
     if os.path.exists(args.target_label):
         with open(args.target_label, 'r') as f:
             content = f.read()
             labels = content.split('\n')
-            labels.pop(-1)
+            labels.pop(-1) # remove empty line
 
     for label in tqdm(labels):
         src_dirs = []
@@ -198,7 +198,7 @@ def augmentation_gamma(src_dir, dest_dir, label):
                 gamma_cvt[i][0] = 255 * (float(i)/255) ** (1.0/gamma)
             im = cv2.LUT(image, gamma_cvt)
 
-            save_image(im, label, os.path.basename(dest_dir))
+            save_image(im, label, '', dest_dir)
 
 def augmentation_resize(src_dir, dest_dir, label):
     assert args.target_label != None, "use --target_label to show class to apply augmentation"
@@ -217,13 +217,10 @@ def augmentation_resize(src_dir, dest_dir, label):
                 continue
             im = cv2.resize(image, (_w, _h), interpolation=cv2.INTER_CUBIC)
 
-            save_image(im, label, os.path.basename(dest_dir))
+            save_image(im, label, '', dest_dir)
 
-def save_image(image, label, type, dest_dir=None):
-    if dest_dir == None:
-        dest_dir = os.path.join(args.target_dir, type, label)
-    else:
-        dest_dir = os.path.join(dest_dir, type, label)
+def save_image(image, label, type, dest_dir):
+    dest_dir = os.path.join(dest_dir, type, label)
 
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir, exist_ok=True)
@@ -242,37 +239,35 @@ def convert_to_imagenet_structure():
 
     os.makedirs(train_dir, exist_ok=True)
 
-    for file in tqdm(os.listdir(args.target_dir)):
-        if not is_ext(file, '.jpg') and not is_ext(file, '.png'):
+    for dir in tqdm(os.listdir(args.target_dir)):
+        path = os.path.join(args.target_dir, dir)
+        if not os.path.isdir(path):
             continue
-        parsed = parse_filename(file)
-        label = parsed['labels'][0]
-        label_dir = '{}/{}'.format(train_dir, label)
-        os.makedirs(label_dir, exist_ok=True)
-        path = '{}/{}'.format(args.target_dir, file)
-        shutil.copyfile(path, '{}/{}'.format(label_dir, file))
+        shutil.move(path, train_dir)
+        # parsed = parse_filename(file)
+        # label = parsed['labels'][0]
+        # label_dir = '{}/{}'.format(train_dir, label)
+        # os.makedirs(label_dir, exist_ok=True)
+        # path = '{}/{}'.format(args.target_dir, file)
+        # shutil.copyfile(path, '{}/{}'.format(label_dir, file))
 
     if args.validation_ratio == None:
         return
 
-    label_file = os.path.join(args.dest_dir, 'synset_labels.txt')
-    with open(label_file, 'w') as f:
-        val_dir = os.path.join(args.dest_dir, 'validation')
-        os.makedirs(val_dir, exist_ok=True)
-        for label in tqdm(os.listdir(train_dir)):
-            label_dir = '{}/{}'.format(train_dir, label)
-            if not os.path.isdir(label_dir):
-                continue
-            count = int(len([f for f in os.listdir(label_dir)]) * args.validation_ratio)
-            for i, file in enumerate(os.listdir(label_dir)):
-                if count <= i:
-                    break
-                src = os.path.join(label_dir, file)
-                tgt = os.path.join(val_dir, file)
-                shutil.move(src, tgt)
+    val_dir = os.path.join(args.dest_dir, 'validation')
+    os.makedirs(val_dir, exist_ok=True)
 
-            text = [label for _ in range(count)]
-            f.write('\n'.join(text) + '\n')
+    for label in tqdm(os.listdir(train_dir)):
+        label_dir = os.path.join(train_dir, label)
+        if not os.path.isdir(label_dir):
+            continue
+        count = int(len([f for f in os.listdir(label_dir)]) * args.validation_ratio)
+        for i, file in enumerate(os.listdir(label_dir)):
+            if count <= i:
+                break
+            src = os.path.join(label_dir, file)
+            tgt = os.path.join(val_dir, file)
+            shutil.move(src, tgt)
 
 def create_node_uniq():
     assert is_ext(args.target_dir, '.csv'), 'pass csv file that has node positions'
@@ -329,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument('--augmentation', default=None, help='caugmentation type: gamma, resize')
     parser.add_argument('--check_jpg', action='store_true', help='check if jpg images exist')
     args = parser.parse_args()
-    print(args)
+    # print(args)
 
     if args.extract_label:
         extract_label()
