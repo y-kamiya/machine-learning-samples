@@ -307,6 +307,22 @@ def check_jpg():
             if type == None:
                 print(path)
 
+def resize_images():
+    assert args.dest_dir != None, "need --dest_dir"
+
+    ratio = 0.5
+
+    for file in tqdm(os.listdir(args.target_dir)):
+        image = cv2.imread(os.path.join(args.target_dir, file))
+        if image is None:
+            continue
+        h, w, _ = image.shape
+        _w, _h = int(w * ratio), int(h * ratio)
+        im = cv2.resize(image, (_w, _h), interpolation=cv2.INTER_CUBIC)
+
+        parsed = parse_filename(file)
+        save_image(im, parsed['labels'][0], '', args.dest_dir)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='check image similarity')
     parser.add_argument('target_dir', help='target image directory path')
@@ -323,6 +339,7 @@ if __name__ == "__main__":
     parser.add_argument('--create_node_uniq', action='store_true', help='create node_uniq.csv')
     parser.add_argument('--augmentation', default=None, help='caugmentation type: gamma, resize')
     parser.add_argument('--check_jpg', action='store_true', help='check if jpg images exist')
+    parser.add_argument('--resize', action='store_true', help='resize images')
     args = parser.parse_args()
     # print(args)
 
@@ -360,5 +377,9 @@ if __name__ == "__main__":
 
     if args.check_jpg:
         check_jpg()
+        sys.exit()
+
+    if args.resize:
+        resize_images()
         sys.exit()
 
