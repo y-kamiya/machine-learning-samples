@@ -229,7 +229,7 @@ class Trainer(object):
 
         return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=update)
 
-    def _get_batch(self):
+    def _get_batch_copy_task(self):
         vocab_size = self.config.vocab_size
         batch_size = self.config.batch_size
         n_sentences = 5
@@ -247,7 +247,7 @@ class Trainer(object):
         self.decoder.train()
 
         if data is None:
-            x, y = self._get_batch()
+            x, y = self._get_batch_copy_task()
         else:
             (x, y) = data
 
@@ -295,7 +295,14 @@ class Trainer(object):
         self.encoder.eval()
         self.decoder.eval()
 
-        x, _ = self._get_batch()
+        data = MTDataset(args, 'test')
+        dataloader = torch.utils.data.DataLoader(data, batch_size=args.batch_size)
+
+        x, y = next(iter(dataloader))
+        x = x.to(device)
+        y = y.to(device)
+
+        # x, _ = self._get_batch_copy_task()
 
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
