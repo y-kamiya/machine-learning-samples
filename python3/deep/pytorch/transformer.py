@@ -308,12 +308,15 @@ class Trainer(object):
         dec_output = self.decoder(x, enc_output)
 
         probabilty = self.generator(dec_output)
+        print(probabilty[0][1][332:339])
         word_ids = torch.argmax(probabilty, dim=-1)
 
         for i in range(x.size(0)):
-            print('input : {}'.format(x[i]))
-            print('output: {}'.format(word_ids[i])) 
-            print('') 
+            print(' '.join([str(id) for id in x[i].tolist()]))
+            print(' '.join([str(id) for id in word_ids[i].tolist()]))
+            # print('input : {}'.format(x[i]))
+            # print('output: {}'.format(word_ids[i])) 
+            # print('') 
 
 class LabelSmoothing(nn.Module):
     def __init__(self, size, smoothing):
