@@ -50,7 +50,7 @@ class MultiHeadAttention(nn.Module):
         self.out_lin = nn.Linear(dim, dim)
 
     def forward(self, x, memory, mask):
-        batch_size, length, dim = x.shape
+        batch_size, _, dim = x.shape
         assert dim == self.dim, 'dimension mismatched'
 
         dim_per_head = dim // self.n_heads
@@ -69,8 +69,9 @@ class MultiHeadAttention(nn.Module):
 
         q = q / math.sqrt(dim_per_head)
 
+        mask_shape = mask.shape
         logit = torch.matmul(q, k.transpose(2, 3))
-        logit.masked_fill_(mask.view(-1, 1, 1, length), -float('inf'))
+        logit.masked_fill_(mask.view(mask_shape[0], 1, 1, mask_shape[1]), -float('inf'))
 
         weights = F.softmax(logit, dim=-1)
         weights = F.dropout(weights, p=self.dropout, training=self.training)
@@ -150,7 +151,7 @@ class TransformerModel(nn.Module):
 
         return (mask.to(device), source_mask.to(device))
 
-    def forward(self, input, src_enc=None):
+    def forward(self, input, src_enc=None, src_mask=None):
         batch_size, n_sentences = input.size()
         (mask, att_mask) = self._get_mask(input)
 
@@ -166,7 +167,7 @@ class TransformerModel(nn.Module):
             x = self.attentions[i](x, x, att_mask)
 
             if self.is_decoder:
-                x = self.source_attentions[i](x, src_enc, mask)
+                x = self.source_attentions[i](x, src_enc, src_mask)
 
             x = self.ffns[i](x)
             x[mask] = 0
@@ -239,8 +240,32 @@ class Trainer(object):
         data = torch.from_numpy(data).requires_grad_(False).to(self.config.device, dtype=torch.int)
         return (data.clone(), data)
 
-    def _generate(self, x):
+    def __predict(self, x):
         return F.log_softmax(self.generator(x), dim=-1)
+
+    def __generate(self, x):
+        self.encoder.eval()
+        self.decoder.eval()
+        self.generator.eval()
+
+        max_len = self.config.n_words
+        src_mask = x == PAD_ID
+        enc_output = self.encoder(x)
+
+        n_batch, _ = x.shape
+        generated = torch.empty(n_batch, max_len).fill_(PAD_ID)
+        generated[:,0] = BOS_ID
+
+        print(x)
+        for i in range(1, max_len):
+            # print('i: {}'.format(i))
+            # print(generated[:, :i])
+            dec_output = self.decoder(generated[:, :i], enc_output, src_mask)
+            gen_output = self.generator(dec_output[:, -1])
+            _, next_words = torch.max(gen_output, dim=1)
+            generated[:, i] = next_words
+
+        return generated
 
     def step(self, data=None):
         self.encoder.train()
@@ -254,7 +279,7 @@ class Trainer(object):
         enc_output = self.encoder(x)
         dec_output = self.decoder(x, enc_output)
 
-        gen_output = self._generate(dec_output)
+        gen_output = self.__predict(dec_output)
 
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
@@ -298,22 +323,16 @@ class Trainer(object):
         data = MTDataset(args, 'test')
         dataloader = torch.utils.data.DataLoader(data, batch_size=args.batch_size)
 
-        x, y = next(iter(dataloader))
+        x, _ = next(iter(dataloader))
         x = x.to(device)
-        y = y.to(device)
 
-        # x, _ = self._get_batch_copy_task()
-
-        enc_output = self.encoder(x)
-        dec_output = self.decoder(x, enc_output)
-
-        probabilty = self.generator(dec_output)
-        print(probabilty[0][1][332:339])
-        word_ids = torch.argmax(probabilty, dim=-1)
+        generated = self.__generate(x)
+        print('input: {}'.format(x))
+        print('generated: {}'.format(generated))
 
         for i in range(x.size(0)):
             print(' '.join([str(id) for id in x[i].tolist()]))
-            print(' '.join([str(id) for id in word_ids[i].tolist()]))
+            print(' '.join([str(int(id)) for id in generated[i].tolist()]))
             # print('input : {}'.format(x[i]))
             # print('output: {}'.format(word_ids[i])) 
             # print('') 
