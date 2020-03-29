@@ -69,9 +69,10 @@ class MultiHeadAttention(nn.Module):
 
         q = q / math.sqrt(dim_per_head)
 
-        mask_shape = mask.shape
+        shape = mask.shape
+        mask_shape = (shape[0], 1, shape[1], shape[2]) if mask.dim() == 3 else (shape[0], 1, 1, shape[1])
         logit = torch.matmul(q, k.transpose(2, 3))
-        logit.masked_fill_(mask.view(mask_shape[0], 1, 1, mask_shape[1]), -float('inf'))
+        logit.masked_fill_(mask.view(mask_shape), -float('inf'))
 
         weights = F.softmax(logit, dim=-1)
         weights = F.dropout(weights, p=self.dropout, training=self.training)
@@ -140,20 +141,24 @@ class TransformerModel(nn.Module):
             ffn = FeedForward(self.dim, self.dim_hidden, self.dim, self.dropout)
             self.ffns.append(ResidualNormalizationWrapper(self.dim, ffn, self.dropout))
 
-    def _get_mask(self, input):
+    def _get_mask(self, input, causal):
         device = self.config.device
         pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input)
         mask = input == pad_tensor.to(dtype=torch.int, device=device)
 
-        shape = input.size()
+        if not causal:
+            return mask.to(device), mask.to(device)
+
+        batch_size, n_words = input.size()
+        shape = (batch_size, n_words, n_words)
         source_mask_np = np.triu(np.ones(shape), k=1).astype('uint8')
         source_mask = torch.from_numpy(source_mask_np) == 1
 
-        return (mask.to(device), source_mask.to(device))
+        return mask.to(device), source_mask.to(device)
 
-    def forward(self, input, src_enc=None, src_mask=None):
+    def forward(self, input, src_enc=None, src_mask=None, causal=False):
         batch_size, n_sentences = input.size()
-        (mask, att_mask) = self._get_mask(input)
+        (mask, att_mask) = self._get_mask(input, causal)
 
         positions = torch.arange(n_sentences).to(dtype=torch.long, device=self.config.device).unsqueeze(0)
         x = self.token_embeddings(input.to(dtype=int))
@@ -256,20 +261,31 @@ class Trainer(object):
         generated = torch.empty(n_batch, max_len).fill_(PAD_ID)
         generated[:,0] = BOS_ID
 
-        print(x)
         for i in range(1, max_len):
-            # print('i: {}'.format(i))
-            # print(generated[:, :i])
-            dec_output = self.decoder(generated[:, :i], enc_output, src_mask)
+            print('i: {}'.format(i))
+            print(generated[:, :i])
+            dec_output = self.decoder(generated[:, :i], enc_output, src_mask, True)
+            print('bbbbbbbbbbbbbbbbbb')
             gen_output = self.generator(dec_output[:, -1])
+            print(gen_output)
             _, next_words = torch.max(gen_output, dim=1)
             generated[:, i] = next_words
+
+        # print(enc_output)
+        # print('ggggggggggggggggggggggggg')
+        # a = self.decoder(x, enc_output, src_mask)
+        # b = self.generator(a)
+        # print(b)
+        # _, c = torch.max(b, dim=2)
+        # print(c)
+
 
         return generated
 
     def step(self, data=None):
         self.encoder.train()
         self.decoder.train()
+        self.generator.train()
 
         if data is None:
             x, y = self._get_batch_copy_task()
@@ -277,7 +293,7 @@ class Trainer(object):
             (x, y) = data
 
         enc_output = self.encoder(x)
-        dec_output = self.decoder(x, enc_output)
+        dec_output = self.decoder(y, enc_output, x == PAD_ID, True)
 
         gen_output = self.__predict(dec_output)
 
