@@ -141,6 +141,9 @@ class TransformerModel(nn.Module):
             ffn = FeedForward(self.dim, self.dim_hidden, self.dim, self.dropout)
             self.ffns.append(ResidualNormalizationWrapper(self.dim, ffn, self.dropout))
 
+        if is_decoder:
+            self.pred_layer = nn.Linear(config.dim, config.vocab_size).to(config.device)
+
     def _get_mask(self, input, causal):
         device = self.config.device
         pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input)
@@ -179,12 +182,14 @@ class TransformerModel(nn.Module):
 
         return x
 
+    def predict(self, x):
+        return F.log_softmax(self.pred_layer(x), dim=-1)
+
 class Trainer(object):
     def __init__(self, config):
         self.config = config
         self.encoder = TransformerModel(config, is_decoder=False).to(config.device)
         self.decoder = TransformerModel(config, is_decoder=True).to(config.device)
-        self.generator = nn.Linear(config.dim, config.vocab_size).to(config.device)
 
         self.optimizer_enc = self._get_optimizer(self.encoder)
         self.scheduler_enc = self._get_scheduler(self.optimizer_enc)
@@ -198,7 +203,6 @@ class Trainer(object):
             data = torch.load(config.model_path, map_location=config.device_name)
             self.encoder.load_state_dict(data['encoder'])
             self.decoder.load_state_dict(data['decoder'])
-            self.generator.load_state_dict(data['generator'])
             self.optimizer_enc.load_state_dict(data['optimizer_enc'])
             self.optimizer_dec.load_state_dict(data['optimizer_dec'])
             print(f'load model from {config.model_path}')
@@ -215,7 +219,6 @@ class Trainer(object):
         data = {
             'encoder': self.encoder.state_dict(),
             'decoder': self.decoder.state_dict(),
-            'generator': self.generator.state_dict(),
             'optimizer_enc': self.optimizer_enc.state_dict(),
             'optimizer_dec': self.optimizer_dec.state_dict(),
         }
@@ -245,13 +248,9 @@ class Trainer(object):
         data = torch.from_numpy(data).requires_grad_(False).to(self.config.device, dtype=torch.int)
         return (data.clone(), data)
 
-    def __predict(self, x):
-        return F.log_softmax(self.generator(x), dim=-1)
-
     def __generate(self, x):
         self.encoder.eval()
         self.decoder.eval()
-        self.generator.eval()
 
         max_len = self.config.n_words
         src_mask = x == PAD_ID
@@ -266,7 +265,7 @@ class Trainer(object):
             print(generated[:, :i])
             dec_output = self.decoder(generated[:, :i], enc_output, src_mask, True)
             print('bbbbbbbbbbbbbbbbbb')
-            gen_output = self.generator(dec_output[:, -1])
+            gen_output = self.decoder.predict(dec_output[:, -1])
             print(gen_output)
             _, next_words = torch.max(gen_output, dim=1)
             generated[:, i] = next_words
@@ -285,7 +284,6 @@ class Trainer(object):
     def step(self, data=None):
         self.encoder.train()
         self.decoder.train()
-        self.generator.train()
 
         if data is None:
             x, y = self._get_batch_copy_task()
@@ -295,7 +293,7 @@ class Trainer(object):
         enc_output = self.encoder(x)
         dec_output = self.decoder(y, enc_output, x == PAD_ID, True)
 
-        gen_output = self.__predict(dec_output)
+        gen_output = self.decoder.predict(dec_output)
 
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
