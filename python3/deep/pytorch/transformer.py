@@ -291,16 +291,16 @@ class Trainer(object):
             (x, y) = data
 
         enc_output = self.encoder(x)
-        dec_output = self.decoder(y, enc_output, x == PAD_ID, True)
+        dec_output = self.decoder(y[:, :-1], enc_output, x == PAD_ID, True)
 
         gen_output = self.decoder.predict(dec_output)
 
         self.optimizer_enc.zero_grad()
         self.optimizer_dec.zero_grad()
 
-        nwords = (y != PAD_ID).sum().item()
+        nwords = (y[:, 1:] != PAD_ID).sum().item()
 
-        loss = self.criterion(gen_output, y, nwords)
+        loss = self.criterion(gen_output, y[:, 1:], nwords)
         loss.backward()
 
         self.optimizer_enc.step()
