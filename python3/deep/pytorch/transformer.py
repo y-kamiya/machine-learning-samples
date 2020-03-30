@@ -144,6 +144,10 @@ class TransformerModel(nn.Module):
         if is_decoder:
             self.pred_layer = nn.Linear(config.dim, config.vocab_size).to(config.device)
 
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
     def _get_mask(self, input, causal):
         device = self.config.device
         pad_tensor = torch.empty(1).fill_(PAD_ID).expand_as(input)
