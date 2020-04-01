@@ -268,23 +268,10 @@ class Trainer(object):
         generated[:,0] = BOS_ID
 
         for i in range(1, max_len):
-            print('i: {}'.format(i))
-            print(generated[:, :i])
             dec_output = self.decoder(generated[:, :i], enc_output, src_mask, True)
-            print('bbbbbbbbbbbbbbbbbb')
             gen_output = self.decoder.predict(dec_output[:, -1])
-            print(gen_output)
             _, next_words = torch.max(gen_output, dim=1)
             generated[:, i] = next_words
-
-        # print(enc_output)
-        # print('ggggggggggggggggggggggggg')
-        # a = self.decoder(x, enc_output, src_mask)
-        # b = self.generator(a)
-        # print(b)
-        # _, c = torch.max(b, dim=2)
-        # print(c)
-
 
         return generated
 
@@ -348,8 +335,6 @@ class Trainer(object):
         x = x.to(device)
 
         generated = self.__generate(x)
-        print('input: {}'.format(x))
-        print('generated: {}'.format(generated))
 
         for i in range(x.size(0)):
             print(' '.join([str(id) for id in x[i].tolist()]))
