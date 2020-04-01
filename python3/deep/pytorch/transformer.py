@@ -248,7 +248,7 @@ class Trainer(object):
     def _get_batch_copy_task(self):
         vocab_size = self.config.vocab_size
         batch_size = self.config.batch_size
-        n_sentences = 5
+        n_sentences = self.config.n_words
 
         data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_sentences))
         data[:, 0] = BOS_ID
