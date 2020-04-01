@@ -160,6 +160,9 @@ class TransformerModel(nn.Module):
         shape = (batch_size, n_words, n_words)
         source_mask_np = np.triu(np.ones(shape), k=1).astype('uint8')
         source_mask = torch.from_numpy(source_mask_np) == 1
+        pad_mask = mask.unsqueeze(-2)
+        pad_mask_t = torch.transpose(pad_mask, 1, 2)
+        source_mask = pad_mask | pad_mask_t | source_mask
 
         return mask.to(device), source_mask.to(device)
 
