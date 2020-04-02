@@ -248,9 +248,17 @@ class Trainer(object):
     def _get_batch_copy_task(self):
         vocab_size = self.config.vocab_size
         batch_size = self.config.batch_size
-        n_sentences = self.config.n_words
+        n_words = self.config.n_words
 
-        data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_sentences))
+        data = np.random.randint(PAD_ID+1, vocab_size, size=(batch_size, n_words))
+
+        min_words = 5
+        eos_indexes = np.random.randint(min_words, n_words, size=batch_size)
+        for i in range(batch_size):
+            index = eos_indexes[i]
+            data[i][index] = EOS_ID
+            data[i][index+1:] = PAD_ID
+
         data[:, 0] = BOS_ID
         data = torch.from_numpy(data).requires_grad_(False).to(self.config.device, dtype=torch.int)
         return (data.clone(), data)
@@ -263,15 +271,22 @@ class Trainer(object):
         src_mask = x == PAD_ID
         enc_output = self.encoder(x)
 
-        n_batch, _ = x.shape
-        generated = torch.empty(n_batch, max_len).fill_(PAD_ID)
+        batch_size, _ = x.shape
+        generated = torch.empty(batch_size, max_len).fill_(PAD_ID)
         generated[:,0] = BOS_ID
+
+        unfinished_sents = torch.ones(batch_size)
 
         for i in range(1, max_len):
             dec_output = self.decoder(generated[:, :i], enc_output, src_mask, True)
             gen_output = self.decoder.predict(dec_output[:, -1])
             _, next_words = torch.max(gen_output, dim=1)
-            generated[:, i] = next_words
+
+            generated[:, i] = next_words * unfinished_sents + PAD_ID * (1 - unfinished_sents)
+
+            unfinished_sents.mul_(next_words.ne(EOS_ID).long())
+            if unfinished_sents.max() == 0:
+                break
 
         return generated
 
