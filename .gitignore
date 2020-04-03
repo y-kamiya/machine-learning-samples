@@ -100,4 +100,4 @@ ENV/
 /site
 
 .DS_store
-
+venv*
