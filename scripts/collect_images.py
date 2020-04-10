@@ -6,6 +6,7 @@ import os
 import argparse
 import sys
 import json
+from requests_html import HTMLSession
 
 # How To
 # (1) ソースコードを保存して命名する (e.g. scrape.py)
@@ -41,35 +42,28 @@ def main(args):
     soup = get_soup(url,header)
     ActualImages=[]
 
-    for div in soup.find_all("div",{"id":"islmp"}):
-        for img in div.find_all("img"):
-            ActualImages.append(img.get('src'))
-    for i , src in enumerate( ActualImages[0:max_images]):
+    session = HTMLSession()
+    r = session.get(url)
+    r.html.render()
+
+    for div in r.html.find('div#islmp'):
+        for a in div.find("a"):
+            print(a);
+            href = a.href
+            print(href);
+            link , Type =json.loads(img.text)["ou"]  ,json.loads(img.text)["ity"]
+            ActualImages.append((link,Type))
+    for i , (img , Type) in enumerate( ActualImages[0:max_images]):
         try:
-            ext = get_ext(src);
-            if ext is None:
-                continue
-            print("Downloading image {} ({})".format(i, src))
-            raw_img = urllib.request.urlopen(src).read()
-            f = open(os.path.join(save_directory , "img_"+str(i)+"."+ext), 'wb')
+            Type = Type if len(Type) > 0 else 'jpg'
+            print("Downloading image {} ({}), type is {}".format(i, img, Type))
+            raw_img = urllib.request.urlopen(img).read()
+            f = open(os.path.join(save_directory , "img_"+str(i)+"."+Type), 'wb')
             f.write(raw_img)
             f.close()
         except Exception as e:
             print ("could not load : "+img)
             print (e)
-
-def get_ext(src):
-    if 'image/jpg' in src:
-        return 'jpg'
-    if 'image/jpeg' in src:
-        return 'jpg'
-    if 'image/png' in src:
-        return 'png'
-    if 'image/gif' in src:
-        return 'gif'
-
-    print('invalid ext: {}'.format(src))
-    return None
 
 if __name__ == '__main__':
     from sys import argv
