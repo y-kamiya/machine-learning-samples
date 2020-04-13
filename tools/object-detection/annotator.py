@@ -15,26 +15,37 @@ class Annotator():
         '2': 'yuki',
     }
 
-    def annotate(self, image_path):
-        if not self.__is_image(image_path):
-            return
-
+    def annotate(self, path):
         if not os.path.isfile(self.CASCADE_FILE):
             raise RuntimeError("%s: not found" % self.CASCADE_FILE)
 
+        if self.__is_image(path):
+            self.annotate_image(path)
+            return
+
+        if self.__is_movie(path):
+            self.annotate_movie(path)
+            return
+
+    def detect_faces(self, image):
         cascade = cv2.CascadeClassifier(self.CASCADE_FILE)
-        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.equalizeHist(gray)
         
-        shape = image.shape
-        writer = Writer(image_path, shape[0], shape[1], shape[2])
+        return cascade.detectMultiScale(gray,
+                                        # detector options
+                                        scaleFactor = 1.1,
+                                        minNeighbors = 5,
+                                        minSize = (24, 24))
+    def annotate_image(self, path, image=None):
+        if image is None:
+            image = cv2.imread(path, cv2.IMREAD_COLOR)
 
-        faces = cascade.detectMultiScale(gray,
-                                         # detector options
-                                         scaleFactor = 1.1,
-                                         minNeighbors = 5,
-                                         minSize = (24, 24))
+        faces = self.detect_faces(image)
+
+        shape = image.shape
+        writer = Writer(path, shape[0], shape[1], shape[2])
+
         for (x, y, w, h) in faces:
             xmax = x + w
             ymax = y + h
@@ -46,7 +57,26 @@ class Annotator():
             if label is not None:
                 writer.addObject(label, x, y, xmax, ymax)
 
-        writer.save('{}.xml'.format(image_path))
+        writer.save('{}.xml'.format(path))
+
+    def annotate_movie(self, path):
+        dirname = os.path.dirname(path)
+        filename, _ = os.path.splitext(os.path.basename(path))
+
+        cap = cv2.VideoCapture(path)
+
+        frame = 0
+        while (cap.isOpened):
+            image_path = '{}/{}_{}.jpg'.format(dirname, filename, frame)
+
+            _, image = cap.read()
+            self.annotate_image(image_path, image)
+
+            cv2.imwrite(image_path, image)
+            frame = frame + 1
+
+        cap.release()
+        cv2.destroyAllWindows()
 
     def get_label(self):
         key = chr(cv2.waitKey(0))
@@ -58,6 +88,10 @@ class Annotator():
     def __is_image(self, path):
         _, ext = os.path.splitext(path)
         return ext in ['.jpg', '.jpeg', '.png']
+
+    def __is_movie(self, path):
+        _, ext = os.path.splitext(path)
+        return ext in ['.mp4']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
