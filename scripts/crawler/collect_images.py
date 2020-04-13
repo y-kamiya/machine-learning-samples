@@ -42,22 +42,26 @@ def main(args):
     soup = get_soup(url,header)
     ActualImages=[]
 
-    session = HTMLSession()
-    r = session.get(url)
-    r.html.render()
+    # session = HTMLSession()
+    # r = session.get(url)
+    # r.html.render()
 
-    for div in r.html.find('div#islmp'):
-        for a in div.find("a"):
-            print(a);
-            href = a.href
-            print(href);
-            link , Type =json.loads(img.text)["ou"]  ,json.loads(img.text)["ity"]
-            ActualImages.append((link,Type))
-    for i , (img , Type) in enumerate( ActualImages[0:max_images]):
+    # for div in r.html.find('div#islmp'):
+    # for div in soup.find_all('div', id='islrg'):
+    #     print('aaaaaaaaaaa')
+        # for img in div.find_all("img"):
+    for img in soup.find_all("a", {'class': "wXeWr islib nfEiy mM5pbd"}):
+        url = img.get('href')
+        print(url)
+        if url:
+            ActualImages.append(url)
+
+    sys.exit()
+    for i , url in enumerate(ActualImages):
         try:
             Type = Type if len(Type) > 0 else 'jpg'
             print("Downloading image {} ({}), type is {}".format(i, img, Type))
-            raw_img = urllib.request.urlopen(img).read()
+            raw_img = urllib.request.urlopen(url).read()
             f = open(os.path.join(save_directory , "img_"+str(i)+"."+Type), 'wb')
             f.write(raw_img)
             f.close()
