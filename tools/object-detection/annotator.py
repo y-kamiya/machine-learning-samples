@@ -14,7 +14,9 @@ class Annotator():
     KEY_LABEL_MAP = {
         '0': 'asuna',
         '1': 'administrator',
-        '2': 'yuki',
+        '2': 'kirito',
+        '3': 'alice',
+        '4': 'yui',
     }
 
     def __init__(self, target):
