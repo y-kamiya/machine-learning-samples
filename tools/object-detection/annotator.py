@@ -2,6 +2,7 @@ import cv2
 import sys
 import os.path
 import argparse
+import hashlib
 from pascal_voc_writer import Writer
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -15,12 +16,18 @@ class Annotator():
         '2': 'yuki',
     }
 
-    output_dir = '/tmp/output'
+    def __init__(self, target):
+        if os.path.isfile(target):
+            self.target = target
+            self.target_dir = os.path.dirname(target)
+        else:
+            self.target = None
+            self.target_dir = target
 
-    def annotate(self, path):
-        self.output_dir = os.path.join(os.path.dirname(path), 'output')
+        self.output_dir = os.path.join(self.target_dir, 'output')
         os.makedirs(self.output_dir, exist_ok=True)
 
+    def annotate(self, path):
         if not os.path.isfile(self.CASCADE_FILE):
             raise RuntimeError("%s: not found" % self.CASCADE_FILE)
 
@@ -96,35 +103,57 @@ class Annotator():
 
     def __is_movie(self, path):
         _, ext = os.path.splitext(path)
-        return ext in ['.mp4']
+        return ext in ['.mp4', '.mov']
 
     def __save_image(self, image, label=None):
-        md5 = hashlib.md5(image)
+        md5 = hashlib.md5(image).hexdigest()
 
         label_name = ''
         if label is not None:
             label_name = self.KEY_LABEL_MAP[label]
 
-        output_path = os.path.join(self.output_dir, label_name, md5, 'jpg')
+        output_path = '{}/{}/{}.jpg'.format(self.output_dir, label_name, md5, 'jpg')
+        print(output_path)
         cv2.imwrite(output_path, image)
 
-    def extract_images(self, path):
-        if not self.__is_movie(path):
-            print('{} is not movie file')
+    def extract_images(self):
+        if not self.__is_movie(self.target):
+            print('{} is not movie file'.format(self.target))
             return
 
-        cap = cv2.VideoCapture(path)
+        cap = cv2.VideoCapture(self.target)
 
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+        detector = cv2.AKAZE_create()
+
+        difference = 1000
         frame = 0
+        _, image = cap.read()
+        des_prev = self.__detectAndCompute(image, detector)
         while (cap.isOpened):
             _, image = cap.read()
-            faces = self.detect_faces(image)
-            if len(faces) != 0:
-                self.__save_image(image)
+
+            des = self.__detectAndCompute(image, detector)
+            matches = bf.match(des_prev, des)
+            dist = [m.distance for m in matches]
+            difference = sum(dist) / len(dist)
+            print(difference)
+
+            if difference > 20:
+                des_prev = des
+
+                faces = self.detect_faces(image)
+                if len(faces) != 0:
+                    self.__save_image(image)
 
             frame = frame + 1
 
         cap.release()
+
+    def __detectAndCompute(self, image, detector):
+        image = cv2.resize(image, (640, 360))
+        _, des = detector.detectAndCompute(image, None)
+        return des
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
@@ -132,10 +161,10 @@ if __name__ == '__main__':
     parser.add_argument('--mv2img', action='store_true', help='extract images from movie file')
     args = parser.parse_args()
 
-    annotator = Annotator()
+    annotator = Annotator(args.target)
 
     if args.mv2img:
-        annotator.extract_images(args.target)
+        annotator.extract_images()
         sys.exit()
 
     for file in os.listdir(args.target):
