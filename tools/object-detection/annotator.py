@@ -15,7 +15,12 @@ class Annotator():
         '2': 'yuki',
     }
 
+    output_dir = '/tmp/output'
+
     def annotate(self, path):
+        self.output_dir = os.path.join(os.path.dirname(path), 'output')
+        os.makedirs(self.output_dir, exist_ok=True)
+
         if not os.path.isfile(self.CASCADE_FILE):
             raise RuntimeError("%s: not found" % self.CASCADE_FILE)
 
@@ -56,6 +61,7 @@ class Annotator():
             label = self.get_label()
             if label is not None:
                 writer.addObject(label, x, y, xmax, ymax)
+                self.__save_image(image, label)
 
         writer.save('{}.xml'.format(path))
 
@@ -72,7 +78,6 @@ class Annotator():
             _, image = cap.read()
             self.annotate_image(image_path, image)
 
-            cv2.imwrite(image_path, image)
             frame = frame + 1
 
         cap.release()
@@ -92,6 +97,11 @@ class Annotator():
     def __is_movie(self, path):
         _, ext = os.path.splitext(path)
         return ext in ['.mp4']
+
+    def __save_image(self, image, label):
+        md5 = hashlib.md5(image)
+        output_path = os.path.join(self.output_dir, self.KEY_LABEL_MAP[label], md5, 'jpg')
+        cv2.imwrite(output_path, image)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
