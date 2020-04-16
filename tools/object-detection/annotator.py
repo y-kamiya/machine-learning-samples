@@ -3,6 +3,7 @@ import sys
 import os.path
 import argparse
 import hashlib
+from tqdm import tqdm
 from pascal_voc_writer import Writer
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -33,10 +34,6 @@ class Annotator():
 
         if self.__is_image(path):
             self.annotate_image(path)
-            return
-
-        if self.__is_movie(path):
-            self.annotate_movie(path)
             return
 
     def detect_faces(self, image):
@@ -72,24 +69,6 @@ class Annotator():
 
         writer.save('{}.xml'.format(path))
 
-    def annotate_movie(self, path):
-        dirname = os.path.dirname(path)
-        filename, _ = os.path.splitext(os.path.basename(path))
-
-        cap = cv2.VideoCapture(path)
-
-        frame = 0
-        while (cap.isOpened):
-            image_path = '{}/{}_{}.jpg'.format(dirname, filename, frame)
-
-            _, image = cap.read()
-            self.annotate_image(image_path, image)
-
-            frame = frame + 1
-
-        cap.release()
-        cv2.destroyAllWindows()
-
     def get_label(self):
         key = chr(cv2.waitKey(0))
         if key not in self.KEY_LABEL_MAP:
@@ -113,7 +92,6 @@ class Annotator():
             label_name = self.KEY_LABEL_MAP[label]
 
         output_path = '{}/{}/{}.jpg'.format(self.output_dir, label_name, md5, 'jpg')
-        print(output_path)
         cv2.imwrite(output_path, image)
 
     def extract_images(self):
@@ -122,22 +100,31 @@ class Annotator():
             return
 
         cap = cv2.VideoCapture(self.target)
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         bf = cv2.BFMatcher(cv2.NORM_HAMMING)
         detector = cv2.AKAZE_create()
 
         difference = 1000
-        frame = 0
         _, image = cap.read()
         des_prev = self.__detectAndCompute(image, detector)
-        while (cap.isOpened):
+        for _ in tqdm(range(frame_count)):
+            if not cap.isOpened:
+                break
+
+            frame = int(round(cap.get(1)))
             _, image = cap.read()
+            if frame % fps != 0:
+                continue
 
             des = self.__detectAndCompute(image, detector)
+            if des is None:
+                continue
+
             matches = bf.match(des_prev, des)
             dist = [m.distance for m in matches]
             difference = sum(dist) / len(dist)
-            print(difference)
 
             if difference > 20:
                 des_prev = des
@@ -145,8 +132,6 @@ class Annotator():
                 faces = self.detect_faces(image)
                 if len(faces) != 0:
                     self.__save_image(image)
-
-            frame = frame + 1
 
         cap.release()
 
