@@ -98,17 +98,45 @@ class Annotator():
         _, ext = os.path.splitext(path)
         return ext in ['.mp4']
 
-    def __save_image(self, image, label):
+    def __save_image(self, image, label=None):
         md5 = hashlib.md5(image)
-        output_path = os.path.join(self.output_dir, self.KEY_LABEL_MAP[label], md5, 'jpg')
+
+        label_name = ''
+        if label is not None:
+            label_name = self.KEY_LABEL_MAP[label]
+
+        output_path = os.path.join(self.output_dir, label_name, md5, 'jpg')
         cv2.imwrite(output_path, image)
+
+    def extract_images(self, path):
+        if not self.__is_movie(path):
+            print('{} is not movie file')
+            return
+
+        cap = cv2.VideoCapture(path)
+
+        frame = 0
+        while (cap.isOpened):
+            _, image = cap.read()
+            faces = self.detect_faces(image)
+            if len(faces) != 0:
+                self.__save_image(image)
+
+            frame = frame + 1
+
+        cap.release()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
-    parser.add_argument('image_dir', default='./images', help='path to directory that has target images')
+    parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
+    parser.add_argument('--mv2img', action='store_true', help='extract images from movie file')
     args = parser.parse_args()
 
     annotator = Annotator()
 
-    for file in os.listdir(args.image_dir):
-        annotator.annotate(os.path.join(args.image_dir, file))
+    if args.mv2img:
+        annotator.extract_images(args.target)
+        sys.exit()
+
+    for file in os.listdir(args.target):
+        annotator.annotate(os.path.join(args.target, file))
