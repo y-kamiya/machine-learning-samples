@@ -54,9 +54,11 @@ class Annotator():
 
         faces = self.detect_faces(image)
 
+        output_path = self.__get_output_path(image)
         shape = image.shape
-        writer = Writer(path, shape[0], shape[1], shape[2])
+        writer = Writer(output_path, shape[0], shape[1], shape[2])
 
+        saved_count = 0
         for (x, y, w, h) in faces:
             xmax = x + w
             ymax = y + h
@@ -67,9 +69,12 @@ class Annotator():
             label = self.get_label()
             if label is not None:
                 writer.addObject(label, x, y, xmax, ymax)
-                self.__save_image(image, label)
+                saved_count = saved_count + 1
 
-        writer.save('{}.xml'.format(path))
+        if 0 < saved_count:
+            cv2.imwrite(output_path, image)
+            name = os.path.splitext(output_path)
+            writer.save('{}.xml'.format(name[0]))
 
     def get_label(self):
         key = chr(cv2.waitKey(0))
@@ -86,15 +91,9 @@ class Annotator():
         _, ext = os.path.splitext(path)
         return ext in ['.mp4', '.mov']
 
-    def __save_image(self, image, label=None):
+    def __get_output_path(self, image):
         md5 = hashlib.md5(image).hexdigest()
-
-        label_name = ''
-        if label is not None:
-            label_name = self.KEY_LABEL_MAP[label]
-
-        output_path = '{}/{}/{}.jpg'.format(self.output_dir, label_name, md5, 'jpg')
-        cv2.imwrite(output_path, image)
+        return '{}/{}.jpg'.format(self.output_dir, md5, 'jpg')
 
     def extract_images(self):
         if not self.__is_movie(self.target):
@@ -133,7 +132,8 @@ class Annotator():
 
                 faces = self.detect_faces(image)
                 if len(faces) != 0:
-                    self.__save_image(image)
+                    output_path = self.__get_output_path(image)
+                    cv2.imwrite(output_path, image)
 
         cap.release()
 
@@ -154,5 +154,5 @@ if __name__ == '__main__':
         annotator.extract_images()
         sys.exit()
 
-    for file in os.listdir(args.target):
+    for file in tqdm(os.listdir(args.target)):
         annotator.annotate(os.path.join(args.target, file))
