@@ -20,15 +20,19 @@ class Annotator():
         '4': 'yui',
     }
 
-    def __init__(self, target):
+    def __init__(self, config):
+        self.config = config
+
+        target = config.target
         if os.path.isfile(target):
             self.target = target
             self.target_dir = os.path.dirname(target)
+            self.output_dir = os.path.splitext(target)[0]
         else:
             self.target = None
             self.target_dir = target
+            self.output_dir = os.path.join(self.target_dir, 'annotations')
 
-        self.output_dir = os.path.join(self.target_dir, 'output')
         os.makedirs(self.output_dir, exist_ok=True)
 
     def annotate(self, path):
@@ -121,7 +125,8 @@ class Annotator():
 
             frame = int(round(cap.get(1)))
             _, image = cap.read()
-            if frame % fps != 0:
+
+            if frame % self.config.sampling_frames != 0:
                 continue
 
             des = self.__detectAndCompute(image, detector)
@@ -132,7 +137,7 @@ class Annotator():
             dist = [m.distance for m in matches]
             difference = sum(dist) / len(dist)
 
-            if difference > 20:
+            if difference > self.config.difference_threshold:
                 des_prev = des
 
                 faces = self.detect_faces(image)
@@ -164,10 +169,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
     parser.add_argument('--mv2img', action='store_true', help='extract images from movie file')
+    parser.add_argument('--sampling_frames', type=int, default=30, help='sampling image by this frames')
+    parser.add_argument('--difference_threshold', type=int, default=20, help='sampling when image difference is over this value from last sampling image')
     parser.add_argument('--extract_labels', action='store_true', help='extract label from annotation file')
     args = parser.parse_args()
 
-    annotator = Annotator(args.target)
+    annotator = Annotator(args)
 
     if args.mv2img:
         annotator.extract_images()
