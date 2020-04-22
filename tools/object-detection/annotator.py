@@ -165,6 +165,29 @@ class Annotator():
                 for obj in xml.findall('object'):
                     print('{} {}'.format(file, obj.find('name').text))
 
+    def fix(self):
+        for root, dirs, files in os.walk(self.target_dir):
+            for file in files:
+                if not self.__is_xml(file):
+                    continue
+
+                xml_path = os.path.join(root, file)
+                with open(xml_path, 'r') as f:
+                    xml = ET.fromstring(f.read())
+
+                path = xml.find('path').text
+                width = int(xml.find('size/width').text)
+                height = int(xml.find('size/height').text)
+
+                writer = Writer(path, height, width, 3)
+                for obj in xml.findall('object'):
+                    xmin = int(obj.find('bndbox/xmin').text)
+                    ymin = int(obj.find('bndbox/ymin').text)
+                    xmax = int(obj.find('bndbox/xmax').text)
+                    ymax = int(obj.find('bndbox/ymax').text)
+                    writer.addObject(obj.find('name').text, xmin, ymin, xmax, ymax)
+                writer.save(xml_path)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
@@ -172,9 +195,14 @@ if __name__ == '__main__':
     parser.add_argument('--sampling_frames', type=int, default=30, help='sampling image by this frames')
     parser.add_argument('--difference_threshold', type=int, default=20, help='sampling when image difference is over this value from last sampling image')
     parser.add_argument('--extract_labels', action='store_true', help='extract label from annotation file')
+    parser.add_argument('--fix', action='store_true', help='')
     args = parser.parse_args()
 
     annotator = Annotator(args)
+
+    if args.fix:
+        annotator.fix()
+        sys.exit()
 
     if args.mv2img:
         annotator.extract_images()
