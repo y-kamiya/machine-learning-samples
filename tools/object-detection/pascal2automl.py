@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-#
 # オープンデータをGoogle AutoMLで利用できるようにする
 # (PascalVoc形式 XML から Google AutoML 用のCSVを作成する)
 #
@@ -9,18 +8,22 @@
 #---------------------------------------------------------------------
 # ユーザー設定値
 #---------------------------------------------------------------------
+import argparse
+
+parser = argparse.ArgumentParser(add_help=True)
+parser.add_argument('dataset_dir', help='')
+parser.add_argument('--type', default='train', help='train or val or test')
+parser.add_argument('--gcs_dir', default='gs://planar-root-261601-vcm/dataset_chara5/', help='')
+args = parser.parse_args()
 
 # フォルダパス (ローカルPC内で PascalVoc形式XMLが格納されているフォルダ)
-xmlFolderPath = 'XML'
-
-# フォルダパス (ローカルPC内で 画像ファイルが格納されているフォルダ)
-imgFolderPath = 'JPEG'
+datasetFolderPath = args.dataset_dir
 
 # フォルダパス (GoogleCloudStorage内で、画像ファイルを格納しているフォルダ)
-imgFolderPath_gs = 'gs://itak-test/ProjevtXXX/'  
+imgFolderPath_gs = args.gcs_dir
 
 # CSV出力パス 
-outputCSVpath = 'AutoMLVision.csv'
+outputCSV = 'automl_annotations.csv'
 
 # CSV出力時の座標の桁数 (小数点以下何桁まで出力するか)
 roundDigit = 2
@@ -50,7 +53,7 @@ def MBox(msg):
 	print('\n' + msg + '\n')
 	
 	# メッセージボックスの表示
-	messagebox.showerror(os.path.basename(__file__), msg)
+	# messagebox.showerror(os.path.basename(__file__), msg)
 
 
 #---------------------------------------------------------------------
@@ -70,23 +73,29 @@ def ErrorEnd(msg):
 #---------------------------------------------------------------------
 print ('--- Process Start --------------------------------')
 
-# フォルダの存在確認 (アノテーションファイル格納フォルダ)
-xmlFolderPath = os.path.abspath(xmlFolderPath)
-if(os.path.exists(xmlFolderPath) == False): 
-    ErrorEnd ('Error | 指定された入力フォルダが存在しません: ' + xmlFolderPath)
-
-# フォルダの存在確認 (画像格納フォルダ)
-imgFolderPath = os.path.abspath(imgFolderPath)
-if(os.path.exists(imgFolderPath) == False): 
-    ErrorEnd ('Error | 指定された入力フォルダが存在しません: ' + imgFolderPath)
+# フォルダの存在確認
+datasetFolderPath = os.path.abspath(datasetFolderPath)
+if(os.path.exists(datasetFolderPath) == False): 
+    ErrorEnd ('Error | 指定された入力フォルダが存在しません: ' + datasetFolderPath)
 
 # ファイル数の一致を確認 (アノテーションファイルと画像ファイル)
-anoFilePaths = glob.glob(xmlFolderPath + '/*.xml')
-imgFilePaths = glob.glob(imgFolderPath + '/*.jpg')
+anoFilePaths = []
+imgFilePaths = []
+for root, _, files in os.walk(datasetFolderPath):
+    for file in files:
+        split = os.path.splitext(file)
+        if split[1] in ['.png', '.jpg', '.jpeg']:
+            imgFilePaths.append(os.path.join(root, file))
+            continue
+
+        if split[1] in ['.xml']:
+            anoFilePaths.append(os.path.join(root, file))
+            continue
+
 if(len(anoFilePaths) != len(imgFilePaths)): 
     s = 'Error | アノテーションファイルと画像ファイルの数が一致していません'
     s = s + '\n' + str(len(anoFilePaths)) + ' Annotation Files'
-    s = s + '\n' + str(len(anoFilePaths)) + ' Image Files'
+    s = s + '\n' + str(len(imgFilePaths)) + ' Image Files'
     ErrorEnd (s)
 
 # ファイルの対応を確認 (# アノテーションファイル名が AAA.xml の場合、AAA.jpgという画像があるか確認)
@@ -145,7 +154,7 @@ for i, anoFilePath in enumerate(anoFilePaths):
     # アノテーションファイル内のデータを取得 (オブジェクト)
     for j, obj in enumerate(anoRoot.iter('object')):
         
-        # アノテーションファイル内のデータを取得 (各オブジェクトのタグ・左上座標・右下座標)
+        # アノテーションファイル内のデータを取得 (各オブジェクトのタグ・左ä¸ 座標・右下座標)
         label = obj.find('name')
         xMin = obj.find('bndbox/xmin')
         yMin = obj.find('bndbox/ymin')
@@ -176,16 +185,15 @@ for i, anoFilePath in enumerate(anoFilePaths):
         yMaxRatio = round(int(yMax) / int(height), roundDigit)
 
         # データの区分を設定 (アノテーションファイルの80%はテスト用、10%はバリデーション用、10%はテスト用)
-        datasetName = 'TRAIN'
-        if (0.8 < (i/len(anoFilePaths))):
+        path = os.path.join(imgFolderPath_gs, args.type, imgFileName)
+        datasetName = args.type.upper()
+        if args.type == 'val':
             datasetName = 'VALIDATE'
-        if (0.9 < (i/len(anoFilePaths))):
-            datasetName = 'TEST'
 
         # 出力文字列の作成 (AutoML Vision形式)
         formatString = '{0:.' + str(roundDigit) + 'f}'
         sOutput = datasetName
-        sOutput = sOutput + ',' + imgFolderPath_gs + imgFileName
+        sOutput = sOutput + ',' + path
         sOutput = sOutput + ',' + label
         sOutput = sOutput + ',' + formatString.format(xMinRatio)
         sOutput = sOutput + ',' + formatString.format(yMinRatio)
@@ -203,16 +211,16 @@ for i, anoFilePath in enumerate(anoFilePaths):
     anoFile.close()
 
 # ファイル出力 (AutoML Vision形式CSV)
-outputCSVpath = os.path.abspath(outputCSVpath)
+outputCSV = os.path.abspath(os.path.join(datasetFolderPath, outputCSV))
 try:
-    with open(outputCSVpath, mode='w') as f:
+    with open(outputCSV, mode='w') as f:
         for line in outputLines:
             f.write(line + '\n')
 except Exception as e:
     ErrorEnd('Error | ファイル出力に失敗しました: ' + str(e))
 
 # 終了通知
-MBox ('正常終了しました。\n出力ファイル: ' + outputCSVpath)
+MBox ('正常終了しました。\n出力ファイル: ' + outputCSV)
 
 #---------------------------------------------------------------------
 # End
