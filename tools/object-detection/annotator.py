@@ -46,7 +46,7 @@ class Annotator():
         return cascade.detectMultiScale(gray,
                                         # detector options
                                         scaleFactor = 1.1,
-                                        minNeighbors = 5,
+                                        minNeighbors = 1,
                                         minSize = (24, 24))
     def annotate_image(self, path, image=None):
         if image is None:
