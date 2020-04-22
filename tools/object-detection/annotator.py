@@ -61,7 +61,7 @@ class Annotator():
 
         output_path = self.__get_output_path(image)
         shape = image.shape
-        writer = Writer(output_path, shape[0], shape[1], shape[2])
+        writer = Writer(output_path, shape[1], shape[0], shape[2])
 
         saved_count = 0
         for (x, y, w, h) in faces:
