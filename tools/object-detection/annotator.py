@@ -5,6 +5,7 @@ import argparse
 import hashlib
 from tqdm import tqdm
 from pascal_voc_writer import Writer
+import xml.etree.ElementTree as ET
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -91,6 +92,10 @@ class Annotator():
         _, ext = os.path.splitext(path)
         return ext in ['.mp4', '.mov']
 
+    def __is_xml(self, path):
+        _, ext = os.path.splitext(path)
+        return ext in ['.xml']
+
     def __get_output_path(self, image):
         md5 = hashlib.md5(image).hexdigest()
         return '{}/{}.jpg'.format(self.output_dir, md5, 'jpg')
@@ -142,16 +147,34 @@ class Annotator():
         _, des = detector.detectAndCompute(image, None)
         return des
 
+    def extract_labels(self):
+        for root, dirs, files in os.walk(self.target_dir):
+            for file in files:
+                if not self.__is_xml(file):
+                    continue
+
+                xml_path = os.path.join(root, file)
+                with open(xml_path, 'r') as f:
+                    xml = ET.fromstring(f.read())
+
+                for obj in xml.findall('object'):
+                    print('{} {}'.format(file, obj.find('name').text))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
     parser.add_argument('--mv2img', action='store_true', help='extract images from movie file')
+    parser.add_argument('--extract_labels', action='store_true', help='extract label from annotation file')
     args = parser.parse_args()
 
     annotator = Annotator(args.target)
 
     if args.mv2img:
         annotator.extract_images()
+        sys.exit()
+
+    if args.extract_labels:
+        annotator.extract_labels()
         sys.exit()
 
     for file in tqdm(os.listdir(args.target)):
