@@ -73,8 +73,10 @@ class Augmentator():
         writer = Writer(output_path, shape[0], shape[1], shape[2])
         for i in range(len(result['bboxes'])):
             e = [int(value) for value in result['bboxes'][i]]
+            if e[2] - e[0] < self.MIN_BBOX or e[3] - e[1] < self.MIN_BBOX:
+                continue
             writer.addObject(result['category_id'][i], e[0], e[1], e[2], e[3])
-            image_tmp = result['image'].copy()
+            # image_tmp = result['image'].copy()
             # cv2.rectangle(image_tmp, (e[0], e[1]), (e[2], e[3]), (0, 0, 255), 2)
             # cv2.imshow("annotation", image_tmp)
             # cv2.waitKey(0)
