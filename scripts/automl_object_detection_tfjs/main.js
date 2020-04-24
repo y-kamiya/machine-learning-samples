@@ -15,10 +15,11 @@ async function run() {
     document.body.append(pre);
   
     var context = canvas.getContext('2d');
+    context.drawImage(img, 0, 0);
+
     context.beginPath();
     for (var i in predictions) {
         var box = predictions[i].box
-        var label = 
         context.rect(box.left, box.top, box.width, box.height);
         context.font = '24pt Arial'
         var text = predictions[i].label + ": " + predictions[i].score.toFixed(3);
