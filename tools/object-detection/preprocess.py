@@ -11,6 +11,23 @@ class Preprocessor():
     def __init__(self):
         pass
 
+    def rotate(self, dir, file, angle):
+        if not self.__is_image(file):
+            return
+
+        rotate_dir = os.path.join(dir, 'rotate')
+        os.makedirs(rotate_dir, exist_ok=True)
+
+        image = cv2.imread(os.path.join(dir, file))
+        h, w, _ = image.shape
+
+        center = (int(w/2), int(h/2))
+        transform = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated = cv2.warpAffine(image, transform, (w, h))
+
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
+        cv2.imwrite(self.__get_output_path(rotated, rotate_dir), rotated, encode_param)
+
     def clamp(self, dir, file):
         if not self.__is_image(file):
             return
@@ -51,9 +68,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='preprocess images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
     parser.add_argument('--clamp', action='store_true', help='clamp images')
+    parser.add_argument('--rotate', type=int, default=0, help='create rotate images')
     args = parser.parse_args()
 
     preprocessor = Preprocessor()
+
+    if args.rotate != 0:
+        for file in tqdm(os.listdir(args.target)):
+            preprocessor.rotate(args.target, file, args.rotate)
 
     if args.clamp:
         for file in tqdm(os.listdir(args.target)):
