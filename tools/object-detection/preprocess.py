@@ -5,8 +5,8 @@ import argparse
 from tqdm import tqdm
 
 class Preprocessor():
-    MIN = 80
-    MAX = 960
+    MIN = 144
+    MAX = 1280
 
     def __init__(self):
         pass
@@ -22,32 +22,22 @@ class Preprocessor():
         
         h_orig, w_orig, _ = image.shape
         ratio = h_orig / w_orig
-        need_clamp = True
-        if ratio < 1.0 and h_orig < self.MIN:
-            # 短辺がhでmin以下の場合
-            h = self.MIN
-            w = self.MIN / ratio
-        elif ratio > 1.0 and w_orig < self.MIN:
-            # 短辺がwでmin以下の場合
-            h = self.MIN * ratio
-            w = self.MIN
-        elif ratio < 1.0 and w_orig > self.MAX:
-            # 長辺がwでmax以上の場合
-            h = self.MAX * ratio
-            w = self.MAX
-        elif ratio > 1.0 and h_orig > self.MAX:
-            # 長辺がhでmax以上の場合
-            h = self.MAM
-            w = self.MAM / ratio
-        else:
-            need_clamp = False
+        longer = w_orig if h_orig <= w_orig else h_orig
+        shorter = w_orig if h_orig > w_orig else h_orig
+
+        scale = 1
+        if self.MAX < longer:
+            scale = self.MAX / longer
+        elif shorter < self.MIN:
+            scale = self.MIN / shorter
 
         clamped = image
-        if need_clamp:
-            print('clamped ({}, {}) => ({}, {})'.format(w_orig, h_orig, w, h))
-            clamped = cv2.resize(image, (int(w), int(h)))
+        if scale != 1:
+            print('clamped ({}, {}) => ({}, {})'.format(w_orig, h_orig, int(w_orig * scale), int(h_orig * scale)))
+            clamped = cv2.resize(image, dsize=None, fx=scale, fy=scale)
 
-        cv2.imwrite(self.__get_output_path(clamped, clamp_dir), clamped)
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
+        cv2.imwrite(self.__get_output_path(clamped, clamp_dir), clamped, encode_param)
 
     def __is_image(self, path):
         _, ext = os.path.splitext(path)
