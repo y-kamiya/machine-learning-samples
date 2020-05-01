@@ -8,8 +8,10 @@ from pascal_voc_writer import Writer
 import xml.etree.ElementTree as ET
 
 class Augmentator():
-    def __init__(self):
-        pass
+    MIN_BBOX = 16
+
+    def __init__(self, config):
+        self.config = config
 
     def execute(self, path):
         if not self.__is_xml(path):
@@ -20,12 +22,19 @@ class Augmentator():
 
         annotations = self.__build_annotations(image, path)
 
-        flip_dir = os.path.join(os.path.dirname(path), 'flip')
-        self.__save_result([alb.HorizontalFlip(p=1)], annotations, flip_dir)
+        if self.config.rotate:
+            rotate_dir = os.path.join(os.path.dirname(path), 'rotate')
+            for _ in range(4):
+                self.__save_result([alb.Rotate(limit=135, always_apply=True)], annotations, rotate_dir)
 
-        resize_dir = os.path.join(os.path.dirname(path), 'resize')
-        for w, h in self.__get_resize_patterns(image):
-            self.__save_result([alb.Resize(p=1, width=w, height=h)], annotations, resize_dir)
+        if self.config.flip:
+            flip_dir = os.path.join(os.path.dirname(path), 'flip')
+            self.__save_result([alb.HorizontalFlip(p=1)], annotations, flip_dir)
+
+        if self.config.resize:
+            resize_dir = os.path.join(os.path.dirname(path), 'resize')
+            for w, h in self.__get_resize_patterns(image):
+                self.__save_result([alb.Resize(p=1, width=w, height=h)], annotations, resize_dir)
 
     def __is_xml(self, path):
         _, ext = os.path.splitext(path)
@@ -94,45 +103,12 @@ class Augmentator():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
+    parser.add_argument('--flip', action='store_true', help='apply flip')
+    parser.add_argument('--resize', action='store_true', help='apply resize')
+    parser.add_argument('--rotate', action='store_true', help='apply rotate')
     args = parser.parse_args()
 
-    augmentator = Augmentator()
+    augmentator = Augmentator(args)
 
     for file in tqdm(os.listdir(args.target)):
         augmentator.execute(os.path.join(args.target, file))
-
-
-# def get_aug(aug, min_area=0., min_visibility=0.):
-#     return alb.Compose(aug, bbox_params=alb.BboxParams(format='coco', min_area=min_area, 
-#                                                min_visibility=min_visibility, label_fields=['category_id']))
-#
-# BOX_COLOR = (255, 0, 0)
-# TEXT_COLOR = (255, 255, 255)
-#
-# def visualize_bbox(img, bbox, class_id, class_idx_to_name, color=BOX_COLOR, thickness=2):
-#     x_min, y_min, w, h = bbox
-#     x_min, x_max, y_min, y_max = int(x_min), int(x_min + w), int(y_min), int(y_min + h)
-#     cv2.rectangle(img, (x_min, y_min), (x_max, y_max), color=color, thickness=thickness)
-#     class_name = class_idx_to_name[class_id]
-#     ((text_width, text_height), _) = cv2.getTextSize(class_name, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 1)    
-#     cv2.rectangle(img, (x_min, y_min - int(1.3 * text_height)), (x_min + text_width, y_min), BOX_COLOR, -1)
-#     cv2.putText(img, class_name, (x_min, y_min - int(0.3 * text_height)), cv2.FONT_HERSHEY_SIMPLEX, 0.35,TEXT_COLOR, lineType=cv2.LINE_AA)
-#     return img
-#
-# def visualize(annotations, category_id_to_name):
-#     img = annotations['image'].copy()
-#     for idx, bbox in enumerate(annotations['bboxes']):
-#         img = visualize_bbox(img, bbox, annotations['category_id'][idx], category_id_to_name)
-#     plt.figure(figsize=(12, 12))
-#     plt.imshow(img)
-#
-# image = cv2.imread('/Users/yuji.kamiya//Desktop/test/output/08213b6332f0439471b12d762964d19d.jpg')
-# bboxes = [[13, 17, 60, 60]]
-# annotations = {'image': image, 'bboxes': bboxes, 'category_id':[1,2]}
-# visualize(annotations, {1:'aaa', 2:'bbb'})
-#
-# aug = get_aug([alb.HorizontalFlip(p=1)])
-# augmented = aug(**annotations)
-# print(augmented['bboxes'])
-#
-# visualize(augmented, {1:'aaa', 2:'bbb'})
