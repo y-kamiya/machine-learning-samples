@@ -34,8 +34,8 @@ class Augmentator():
     def __get_resize_patterns(self, image):
         height, width, _ = image.shape
         min = 144
-        max = 960
-        resized_ratio = [0.125, 0.25, 0.5, 2, 4, 8]
+        max = 1280
+        resized_ratio = [0.125, 0.25, 0.5, 1, 2, 4, 8]
 
         patterns = []
         for ratio in resized_ratio:
@@ -66,20 +66,22 @@ class Augmentator():
 
         output_path = self.__get_output_path(result['image'], output_dir)
         filename, _ = os.path.splitext(output_path)
-        shape = result['image'].shape
+        height, width, channel = result['image'].shape
 
         cv2.imwrite(output_path, result['image'])
 
-        writer = Writer(output_path, shape[0], shape[1], shape[2])
+        writer = Writer(output_path, width, height, channel)
         for i in range(len(result['bboxes'])):
             e = [int(value) for value in result['bboxes'][i]]
             if e[2] - e[0] < self.MIN_BBOX or e[3] - e[1] < self.MIN_BBOX:
                 continue
             writer.addObject(result['category_id'][i], e[0], e[1], e[2], e[3])
+
             # image_tmp = result['image'].copy()
             # cv2.rectangle(image_tmp, (e[0], e[1]), (e[2], e[3]), (0, 0, 255), 2)
             # cv2.imshow("annotation", image_tmp)
             # cv2.waitKey(0)
+
         writer.save('{}.xml'.format(filename))
 
     def __get_output_path(self, image, output_dir):
