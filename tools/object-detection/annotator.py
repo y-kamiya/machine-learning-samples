@@ -200,6 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--extract_labels', action='store_true', help='extract label from annotation file')
     parser.add_argument('--fix', action='store_true', help='')
     parser.add_argument('--all_faces', action='store_true', help='annotate all faces as "face"')
+    parser.add_argument('--recursive', action='store_true', help='search target files recursively')
     args = parser.parse_args()
 
     annotator = Annotator(args)
@@ -216,5 +217,11 @@ if __name__ == '__main__':
         annotator.extract_labels()
         sys.exit()
 
-    for file in tqdm(os.listdir(args.target)):
-        annotator.annotate(os.path.join(args.target, file))
+    if not args.recursive:
+        for file in tqdm(os.listdir(args.target)):
+            annotator.annotate(os.path.join(args.target, file))
+        sys.exit()
+
+    for root, _, files in os.walk(args.target):
+        for file in tqdm(files):
+            annotator.annotate(os.path.join(root, file))
