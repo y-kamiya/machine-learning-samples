@@ -24,7 +24,7 @@ class Augmentator():
 
         if self.config.rotate:
             rotate_dir = os.path.join(os.path.dirname(path), 'rotate')
-            for _ in range(4):
+            for _ in range(2):
                 self.__save_result([alb.Rotate(limit=135, always_apply=True)], annotations, rotate_dir)
 
         if self.config.flip:
@@ -44,7 +44,7 @@ class Augmentator():
         height, width, _ = image.shape
         min = 144
         max = 1280
-        resized_ratio = [0.125, 0.25, 0.5, 1, 2, 4, 8]
+        resized_ratio = [0.125, 0.25, 0.375, 0.5, 0.75, 1, 1.5, 2, 4, 8]
 
         patterns = []
         for ratio in resized_ratio:
