@@ -33,6 +33,8 @@ class Annotator():
             self.target_dir = target
             self.output_dir = os.path.join(self.target_dir, 'annotations')
 
+        if config.output_dir is not None:
+            self.output_dir = config.output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
     def annotate(self, path):
@@ -201,6 +203,7 @@ if __name__ == '__main__':
     parser.add_argument('--fix', action='store_true', help='')
     parser.add_argument('--all_faces', action='store_true', help='annotate all faces as "face"')
     parser.add_argument('--recursive', action='store_true', help='search target files recursively')
+    parser.add_argument('--output_dir', default=None, help='path to output directory')
     args = parser.parse_args()
 
     annotator = Annotator(args)
