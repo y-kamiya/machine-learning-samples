@@ -82,6 +82,9 @@ class Annotator():
             writer.save('{}.xml'.format(name[0]))
 
     def get_label(self):
+        if self.config.all_faces:
+            return 'face'
+
         key = chr(cv2.waitKey(0))
         if key not in self.KEY_LABEL_MAP:
             return None
@@ -196,6 +199,7 @@ if __name__ == '__main__':
     parser.add_argument('--difference_threshold', type=int, default=20, help='sampling when image difference is over this value from last sampling image')
     parser.add_argument('--extract_labels', action='store_true', help='extract label from annotation file')
     parser.add_argument('--fix', action='store_true', help='')
+    parser.add_argument('--all_faces', action='store_true', help='annotate all faces as "face"')
     args = parser.parse_args()
 
     annotator = Annotator(args)
