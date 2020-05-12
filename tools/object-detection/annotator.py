@@ -77,7 +77,7 @@ class Annotator():
                 saved_count = saved_count + 1
 
         if 0 < saved_count:
-            cv2.imwrite(output_path, image)
+            cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
             name = os.path.splitext(output_path)
             writer.save('{}.xml'.format(name[0]))
 
@@ -143,7 +143,7 @@ class Annotator():
                 faces = self.detect_faces(image)
                 if len(faces) != 0:
                     output_path = self.__get_output_path(image)
-                    cv2.imwrite(output_path, image)
+                    cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
 
         cap.release()
 

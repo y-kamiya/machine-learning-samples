@@ -77,7 +77,7 @@ class Augmentator():
         filename, _ = os.path.splitext(output_path)
         height, width, channel = result['image'].shape
 
-        cv2.imwrite(output_path, result['image'])
+        cv2.imwrite(output_path, result['image'], [cv2.IMWRITE_JPEG_QUALITY, 100])
 
         writer = Writer(output_path, width, height, channel)
         for i in range(len(result['bboxes'])):
