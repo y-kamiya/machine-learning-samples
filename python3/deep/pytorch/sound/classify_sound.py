@@ -11,15 +11,24 @@ import numpy as np
 import os
 import argparse
 import time
+import sys
 
 class Trainer():
     def __init__(self, config):
         self.config = config
 
-        self.model = Model_M5().to(config.device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr = 0.01, weight_decay = 0.0001)
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size = 20, gamma = 0.1)
+        self.model = self.__create_model()
+        self.optimizer = self.__create_optimizer(self.model)
+        self.scheduler = self.__create_scheduler(self.optimizer)
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
+
+        self.model.apply(self.__weights_init)
+
+    def __weights_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            nn.init.xavier_uniform_(m.weight)
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
 
     def update_epoch(self):
         self.scheduler.step()
@@ -36,8 +45,8 @@ class Trainer():
             self.optimizer.zero_grad()
 
             output = self.model(data)
-            output = output.permute(1, 0, 2)
-            loss = F.nll_loss(output[0], target)
+            # print(output, target)
+            loss = F.nll_loss(output, target)
             loss.backward()
             self.optimizer.step()
 
@@ -49,6 +58,26 @@ class Trainer():
                     epoch, batch_idx * self.config.batch_size, len(train_loader.dataset),
                     100. * batch_idx / len(train_loader), loss))
 
+    def __create_model(self):
+        device = self.config.device
+        if self.config.model_type == 'escconv':
+            return Model_EscConv().to(device)
+        
+        return Model_M5().to(device)
+
+    def __create_optimizer(self, model):
+        if self.config.model_type == 'escconv':
+            return optim.Adam(model.parameters(), lr = 0.0001)
+        #     return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
+        
+        return optim.Adam(model.parameters(), lr = 0.01, weight_decay = 0.0001)
+
+    def __create_scheduler(self, optimizer):
+        if self.config.model_type == 'escconv':
+            return optim.lr_scheduler.LambdaLR(optimizer, lr_lambda = lambda _: 1.0)
+
+        return optim.lr_scheduler.StepLR(self.optimizer, step_size = 20, gamma = 0.1)
+
     def eval(self, dataloader, epoch):
         self.model.eval()
         device = self.config.device
@@ -59,10 +88,9 @@ class Trainer():
             data = data.to(device)
             target = target.to(device)
             output = self.model(data)
-            output = output.permute(1, 0, 2)
-            pred = output.max(2)[1]
+            pred = output.max(1)[1]
             correct += pred.eq(target).cpu().sum().item()
-            total_loss += F.nll_loss(output[0], target, reduction='sum')
+            total_loss += F.nll_loss(output, target, reduction='sum')
 
         n_data = len(dataloader.dataset)
         self.writer.add_scalar('loss/eval', total_loss / n_data, epoch, time.time())
@@ -70,6 +98,41 @@ class Trainer():
 
         print('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
             correct, n_data, 100. * correct / n_data))
+
+class Model_EscConv(nn.Module):
+    def __init__(self):
+        super(Model_EscConv, self).__init__()
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(1, 80, kernel_size=(57,6), stride=1),
+            nn.MaxPool2d((4,3), stride=(1,3)),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(80, 80, kernel_size=(1,3), stride=1),
+            nn.MaxPool2d((1,3), stride=(1,3)),
+            nn.ReLU(True),
+        )
+        self.fc1 = nn.Sequential(
+            # nn.Linear(240, 5000),
+            nn.Linear(3680, 5000),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+        )
+        self.fc2 = nn.Sequential(
+            nn.Linear(5000, 50),
+            nn.ReLU(True),
+            nn.Dropout(0.5),
+        )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = x.view(x.shape[0], -1)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=1)
 
 class Model_M5(nn.Module):
     def __init__(self):
@@ -105,10 +168,12 @@ class Model_M5(nn.Module):
         x = self.avgPool(x)
         x = x.permute(0, 2, 1) #change the 512x1 to 1x512
         x = self.fc1(x)
-        return F.log_softmax(x, dim = 2)
+        return F.log_softmax(x, dim = 2).permute(1, 0, 2).squeeze()
 
-class SoundDataset(Dataset):
+class BaseDataset(Dataset):
     def __init__(self, csv_path, audio_dir, folderList):
+        super(BaseDataset, self).__init__()
+
         csvData = pd.read_csv(csv_path)
 
         self.file_names = []
@@ -121,6 +186,49 @@ class SoundDataset(Dataset):
                 
         self.audio_dir = audio_dir
 
+    def __getitem__(self, index):
+        pass
+
+    def __len__(self):
+        return len(self.file_names)
+
+class LogmelDataset(BaseDataset):
+    def __init__(self, csv_path, audio_dir, folderList):
+        super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
+
+        self.data = []
+
+        frame_size = 512
+        window_size = 1024
+        frame_per_segment = 40
+        segment_size = frame_size * frame_per_segment
+        step_size = segment_size // 2
+
+        transform = torchaudio.transforms.MelSpectrogram(sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60)
+
+        for index, name in enumerate(self.file_names):
+            # if index > 5:
+            #     break
+            path = os.path.join(self.audio_dir, name)
+            soundData, _ = torchaudio.load(path, out = None, normalization = True)
+
+            self.data.append((transform(soundData), self.labels[index]))
+
+            # start = 0
+            # clip = soundData[:, start:(start+segment_size)]
+            # while clip.shape[1] == segment_size:
+            #     mel = transform(clip)
+            #     self.data.append((mel, self.labels[index]))
+            #     start += step_size
+            #     clip = soundData[:, start:(start+segment_size)]
+
+    def __getitem__(self, index):
+        return self.data[index]
+
+    def __len__(self):
+        return len(self.data)
+
+class WaveDataset(BaseDataset):
     def __getitem__(self, index):
         path = os.path.join(self.audio_dir, self.file_names[index])
         sound = torchaudio.load(path, out = None, normalization = True)
@@ -137,9 +245,6 @@ class SoundDataset(Dataset):
         soundFormatted[:32000] = soundData[::5] #take every fifth sample of soundData
         soundFormatted = soundFormatted.permute(1, 0)
         return soundFormatted, self.labels[index]
-    
-    def __len__(self):
-        return len(self.file_names)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
@@ -149,6 +254,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=8, help='epoch count')
     parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
+    parser.add_argument('--model_type', default=None, help='model type')
     args = parser.parse_args()
     print(args)
 
@@ -161,8 +267,12 @@ if __name__ == '__main__':
 
     csv_path = f'{args.dataroot}/meta/esc50.csv'
     audio_dir = f'{args.dataroot}/audio'
-    train_dataset = SoundDataset(csv_path, audio_dir, range(1, 5))
-    eval_dataset = SoundDataset(csv_path, audio_dir, [5])
+    if args.model_type == 'escconv':
+        train_dataset = LogmelDataset(csv_path, audio_dir, [1])
+        eval_dataset = LogmelDataset(csv_path, audio_dir, [5])
+    else:
+        train_dataset = WaveDataset(csv_path, audio_dir, [1])
+        eval_dataset = WaveDataset(csv_path, audio_dir, [5])
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=True)
 
