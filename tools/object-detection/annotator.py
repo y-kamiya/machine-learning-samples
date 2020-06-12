@@ -3,6 +3,8 @@ import sys
 import os.path
 import argparse
 import hashlib
+import random
+import shutil
 from tqdm import tqdm
 from pascal_voc_writer import Writer
 import xml.etree.ElementTree as ET
@@ -61,7 +63,7 @@ class Annotator():
 
         faces = self.detect_faces(image)
 
-        output_path = self.__get_output_path(image)
+        output_path = self.__get_output_path(image, path=path)
         shape = image.shape
         writer = Writer(output_path, shape[1], shape[0], shape[2])
 
@@ -79,7 +81,8 @@ class Annotator():
                 saved_count = saved_count + 1
 
         if 0 < saved_count:
-            cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
+            if path != output_path:
+                cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
             name = os.path.splitext(output_path)
             writer.save('{}.xml'.format(name[0]))
 
@@ -105,9 +108,15 @@ class Annotator():
         _, ext = os.path.splitext(path)
         return ext in ['.xml']
 
-    def __get_output_path(self, image):
+    def __get_output_path(self, image, prefix=None, path=None):
+        if self.config.keep_file_name and path is not None:
+            return path
+
         md5 = hashlib.md5(image).hexdigest()
-        return '{}/{}.jpg'.format(self.output_dir, md5, 'jpg')
+        if prefix:
+            return '{}/{}@{}.{}'.format(self.output_dir, prefix, md5, self.config.save_image_type)
+
+        return '{}/{}.{}'.format(self.output_dir, md5, self.config.save_image_type)
 
     def extract_images(self):
         if not self.__is_movie(self.target):
@@ -140,24 +149,28 @@ class Annotator():
 
             matches = bf.match(des_prev, des)
             dist = [m.distance for m in matches]
-            difference = sum(dist) / len(dist)
+            difference = 1000 if len(dist) == 0 else sum(dist) / len(dist)
 
             if difference > self.config.difference_threshold:
                 des_prev = des
 
                 faces = self.detect_faces(image)
                 if len(faces) != 0:
-                    output_path = self.__get_output_path(image)
+                    output_path = self.__get_output_path(image, frame)
                     cv2.imwrite(output_path, image, [cv2.IMWRITE_JPEG_QUALITY, 100])
 
         cap.release()
 
     def __detectAndCompute(self, image, detector):
+        if image is None:
+            return None
+
         image = cv2.resize(image, (640, 360))
         _, des = detector.detectAndCompute(image, None)
         return des
 
-    def extract_labels(self):
+    def __create_class_path_map(self):
+        class_path_map = {}
         for root, dirs, files in os.walk(self.target_dir):
             for file in files:
                 if not self.__is_xml(file):
@@ -168,7 +181,37 @@ class Annotator():
                     xml = ET.fromstring(f.read())
 
                 for obj in xml.findall('object'):
-                    print('{} {}'.format(file, obj.find('name').text))
+                    cls = obj.find('name').text
+                    if cls not in class_path_map:
+                        class_path_map[cls] = []
+
+                    name, _ = os.path.splitext(file)
+                    class_path_map[cls].append(os.path.join(root, name))
+
+        return class_path_map
+
+    def extract_labels(self):
+        for cls, paths in self.__create_class_path_map().items():
+            for path in paths:
+                print('{} {}'.format(f'{path}.xml', cls))
+
+
+    def copy_images(self):
+        class_path_map = self.__create_class_path_map()
+        class_path_map = sorted(class_path_map.items(), key=lambda x:-len(x[1]))
+
+        func = shutil.move if self.config.mv else shutil.copy
+
+        for cls, paths in class_path_map:
+            print(cls, len(paths))
+            n_sample = min(len(paths), self.config.copy_images_per_class)
+            for path in random.sample(paths, n_sample):
+                jpg = f'{path}.jpg'
+                xml = f'{path}.xml'
+                if os.path.exists(jpg): 
+                    func(jpg, self.output_dir)
+                if os.path.exists(xml): 
+                    func(xml, self.output_dir)
 
     def fix(self):
         for root, dirs, files in os.walk(self.target_dir):
@@ -193,6 +236,7 @@ class Annotator():
                     writer.addObject(obj.find('name').text, xmin, ymin, xmax, ymax)
                 writer.save(xml_path)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='annotate images')
     parser.add_argument('target', default='./images', help='path to target file or directory that has target images')
@@ -204,6 +248,10 @@ if __name__ == '__main__':
     parser.add_argument('--all_faces', action='store_true', help='annotate all faces as "face"')
     parser.add_argument('--recursive', action='store_true', help='search target files recursively')
     parser.add_argument('--output_dir', default=None, help='path to output directory')
+    parser.add_argument('--save_image_type', default='jpg', help='image type to save')
+    parser.add_argument('--keep_file_name', action='store_true', help='keep original file name to save')
+    parser.add_argument('--copy_images_per_class', type=int, default=0, help='copy images with max count per class')
+    parser.add_argument('--mv', action='store_true', help='move instead of copy')
     args = parser.parse_args()
 
     annotator = Annotator(args)
@@ -218,6 +266,10 @@ if __name__ == '__main__':
 
     if args.extract_labels:
         annotator.extract_labels()
+        sys.exit()
+
+    if args.copy_images_per_class != 0:
+        annotator.copy_images()
         sys.exit()
 
     if not args.recursive:
