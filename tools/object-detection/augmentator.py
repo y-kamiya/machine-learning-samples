@@ -17,15 +17,12 @@ class Augmentator():
         if not self.__is_xml(path):
             return
 
-        name, _ = os.path.splitext(path)
-        image = cv2.imread('{}.jpg'.format(name))
-
-        annotations = self.__build_annotations(image, path)
+        annotations = self.__build_annotations(path)
 
         if self.config.rotate:
             rotate_dir = os.path.join(os.path.dirname(path), 'rotate')
-            for _ in range(2):
-                self.__save_result([alb.Rotate(limit=135, always_apply=True)], annotations, rotate_dir)
+            for _ in range(4):
+                self.__save_result([alb.Rotate(limit=135, always_apply=True, border_mode=cv2.BORDER_REPLICATE)], annotations, rotate_dir)
 
         if self.config.flip:
             flip_dir = os.path.join(os.path.dirname(path), 'flip')
@@ -33,7 +30,7 @@ class Augmentator():
 
         if self.config.resize:
             resize_dir = os.path.join(os.path.dirname(path), 'resize')
-            for w, h in self.__get_resize_patterns(image):
+            for w, h in self.__get_resize_patterns(annotations['image']):
                 self.__save_result([alb.Resize(p=1, width=w, height=h)], annotations, resize_dir)
 
     def __is_xml(self, path):
@@ -55,7 +52,7 @@ class Augmentator():
 
         return patterns
 
-    def __build_annotations(self, image, xml_path):
+    def __build_annotations(self, xml_path):
         with open(xml_path, 'r') as f:
             xml = ET.fromstring(f.read())
 
@@ -64,6 +61,10 @@ class Augmentator():
         for obj in xml.findall('object'):
             labels.append(obj.find('name').text)
             bboxes.append([int(e.text) for e in obj.find('bndbox')])
+
+        dir = os.path.dirname(xml_path)
+        filename = xml.find('filename').text
+        image = cv2.imread(os.path.join(dir, filename))
 
         return {'image': image, 'bboxes': bboxes, 'category_id': labels}
 
