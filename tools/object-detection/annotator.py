@@ -1,5 +1,6 @@
 import cv2
 import sys
+import math
 import os.path
 import argparse
 import hashlib
@@ -200,11 +201,25 @@ class Annotator():
         class_path_map = self.__create_class_path_map()
         class_path_map = sorted(class_path_map.items(), key=lambda x:-len(x[1]))
 
+        class_num_map = {}
+        if os.path.exists(self.config.classnumlist):
+            with open(self.config.classnumlist) as f:
+                contents = f.readlines()
+                for line in contents:
+                    line = line.lstrip().split()
+                    class_num_map[line[1]] = int(line[0])
+
         func = shutil.move if self.config.mv else shutil.copy
 
         for cls, paths in class_path_map:
-            print(cls, len(paths))
-            n_sample = min(len(paths), self.config.copy_images_per_class)
+            value = self.config.copy_images_per_class
+            n_sample = min(len(paths), int(value))
+            if cls in class_num_map:
+                n_sample = min(len(paths), class_num_map[cls])
+            if 0 < value and value < 1:
+                n_sample = math.ceil(len(paths) * value)
+
+            print(cls, len(paths), n_sample)
             for path in random.sample(paths, n_sample):
                 jpg = f'{path}.jpg'
                 xml = f'{path}.xml'
@@ -250,8 +265,9 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', default=None, help='path to output directory')
     parser.add_argument('--save_image_type', default='jpg', help='image type to save')
     parser.add_argument('--keep_file_name', action='store_true', help='keep original file name to save')
-    parser.add_argument('--copy_images_per_class', type=int, default=0, help='copy images with max count per class')
+    parser.add_argument('--copy_images_per_class', type=float, default=-1, help='copy images with max count per class')
     parser.add_argument('--mv', action='store_true', help='move instead of copy')
+    parser.add_argument('--classnumlist', default="", help='class num list to define sample num')
     args = parser.parse_args()
 
     annotator = Annotator(args)
@@ -268,7 +284,7 @@ if __name__ == '__main__':
         annotator.extract_labels()
         sys.exit()
 
-    if args.copy_images_per_class != 0:
+    if 0 <= args.copy_images_per_class:
         annotator.copy_images()
         sys.exit()
 
