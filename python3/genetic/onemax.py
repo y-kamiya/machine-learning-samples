@@ -1,57 +1,58 @@
 import sys
 import random
 import copy
+import argparse
 
-class OneMax():
-    def __init__(self, dim, n_populations, n_epochs, cross_rate):
+class Solver():
+    def __init__(self, dim, n_individuals, n_epochs, cross_rate):
         self.dim = dim
-        self.n_populations = n_populations
+        self.n_individuals = n_individuals
         self.n_epochs = n_epochs
         self.cross_rate = cross_rate
 
-        self.populations = [Population(dim) for _ in range(n_populations)]
+        self.population = [Individual(dim) for _ in range(n_individuals)]
 
     def find_elite(self):
-        scores = [p.score() for p in self.populations]
+        scores = [p.score() for p in self.population]
         index = scores.index(max(scores))
-        return self.populations[index]
+        return self.population[index]
     
-    def evolve(self):
+    def execute(self):
         for epoch in range(self.n_epochs):
             self.output(epoch)
 
             elite = self.find_elite()
             if elite.score() == self.dim:
                 print('finish evolution on generation {}'.format(epoch))
-                break
+                return
 
             next_populations = self.create_next_populations()
 
-            self.populations = [elite] + self.select(self.n_populations - 1, self.populations + next_populations)
+            self.population = [elite] + self.select(self.n_individuals - 1, self.population + next_populations)
 
         self.output(self.n_epochs)
 
     def output(self, epoch):
-        print('epoch {}: {}'.format(epoch, list(map(lambda p: p.score(), self.populations))))
+        print('epoch {}: {}'.format(epoch, list(map(lambda p: p.score(), self.population))))
 
     def create_next_populations(self):
-        populations = []
-        for i in range(self.n_populations):
-            parent1 = self.populations[i]
-            parent2 = self.populations[(i + 1) % self.n_populations]
+        population = []
+        for i in range(self.n_individuals):
+            parent1 = self.population[i]
+            parent2 = self.population[(i + 1) % self.n_individuals]
 
             if random.random() < self.cross_rate:
                 child = parent1.cross(parent2)
             else:
                 child = parent1.mutate()
 
-            populations.append(child)
+            population.append(child)
 
-        return populations
+        return population
 
-    def select(self, n_select, populations):
+    def select(self, n_select, population):
         selection = []
-        scores = [p.score() for p in populations]
+        scores = [p.score() for p in population]
         score_total = sum(scores)
 
         for _ in range(n_select):
@@ -60,12 +61,12 @@ class OneMax():
             for i, score in enumerate(scores):
                 score_sum += score
                 if threshold < score_sum:
-                    selection.append(populations[i])
+                    selection.append(population[i])
                     break
 
         return selection
 
-class Population():
+class Individual():
     def __init__(self, dim, genes=None):
         self.dim = dim
         self.genes = genes
@@ -78,15 +79,15 @@ class Population():
     def score(self):
         return sum(self.genes)
 
-    def cross(self, population):
+    def cross(self, individual):
         indexes = random.sample(range(self.dim), 2)
         r1 = min(indexes[0], indexes[1])
         r2 = max(indexes[0], indexes[1])
 
         cloned = copy.deepcopy(self.genes)
-        cloned[r1:r2] = population.gene(r1, r2)
+        cloned[r1:r2] = individual.gene(r1, r2)
 
-        return Population(self.dim, cloned)
+        return Individual(self.dim, cloned)
 
     def mutate(self):
         index = random.choice(range(self.dim))
@@ -94,8 +95,16 @@ class Population():
         cloned = copy.deepcopy(self.genes)
         cloned[index] = (self.genes[index] + 1) % 2
 
-        return Population(self.dim, cloned)
+        return Individual(self.dim, cloned)
 
 if __name__ == '__main__':
-    one_max = OneMax(10, 20, 50, 0.95)
-    one_max.evolve()
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('--dim', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--individuals', type=int, default=50)
+    parser.add_argument('--cross_rate', type=float, default=0.95)
+    args = parser.parse_args()
+    print(args)
+
+    solver = Solver(args.dim, args.individuals, args.epochs, args.cross_rate)
+    solver.execute()
