@@ -61,7 +61,7 @@ class Wordnet():
         self.cache_collect_words[synset] = output
         return output
 
-    def count_hypo(self):
+    def count_hypo_synsets(self):
         hierarchy = self.create_hierarchy()
         for synset in hierarchy.keys():
             output = self.__collect_synsets_recursive(synset, hierarchy)
@@ -69,10 +69,36 @@ class Wordnet():
             for row in cur:
                 print('{}\t{}'.format(row[0], len(output)))
 
+    def count_hypo_words(self):
+        hierarchy = self.create_hierarchy()
+        for root_synset in hierarchy.keys():
+            synsets = self.__collect_synsets_recursive(root_synset, hierarchy)
+
+            count = 0
+            for synset in synsets:
+                cur = self.config.conn.execute("select wordid from sense where synset = '{}'".format(synset))
+                count += len(cur.fetchall())
+
+            cur = self.config.conn.execute("select name from synset where synset = '{}'".format(root_synset))
+            for row in cur:
+                print('{}\t{}'.format(row[0], count))
+
+            # for row in cur:
+            #     print(row)
+            #     word_cur = self.config.conn.execute("select lemma from word where wordid = '{}'".format(row[0]))
+            #     words = word_cur.fetchall()
+            #
+            #     print([row[0] for row in words])
+
+                # print('{}\t{}'.format(row[0], len(output)))
+
+        
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('db', help='db file')
-    parser.add_argument('--count_hypo', action='store_true', help='')
+    parser.add_argument('--count_hypo_synsets', action='store_true', help='')
+    parser.add_argument('--count_hypo_words', action='store_true', help='')
     parser.add_argument('--collect_synsets', default=None, help='')
     parser.add_argument('--loglevel', default='DEBUG')
     args = parser.parse_args()
@@ -84,8 +110,12 @@ if __name__ == '__main__':
     args.conn = sqlite3.connect(args.db)
 
     wordnet = Wordnet(args)
-    if args.count_hypo:
-        wordnet.count_hypo()
+    if args.count_hypo_synsets:
+        wordnet.count_hypo_synsets()
+        sys.exit()
+
+    if args.count_hypo_words:
+        wordnet.count_hypo_words()
         sys.exit()
 
     if args.collect_synsets is not None:
