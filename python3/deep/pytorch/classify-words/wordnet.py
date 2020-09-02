@@ -79,20 +79,15 @@ class Wordnet():
                 cur = self.config.conn.execute("select wordid from sense where synset = '{}'".format(synset))
                 count += len(cur.fetchall())
 
-            cur = self.config.conn.execute("select name from synset where synset = '{}'".format(root_synset))
-            for row in cur:
-                print('{}\t{}'.format(row[0], count))
+            cur = self.config.conn.execute("select synset.name, word.lemma from (synset inner join sense on synset.synset = sense.synset) inner join word on sense.wordid = word.wordid where synset.synset = '{}' and word.lang = 'jpn'".format(root_synset))
+            data = cur.fetchall()
+            if len(data) != 0:
+                row = data[0]
+                if len(row) == 2:
+                    print('{}\t{}\t{}'.format(row[0], row[1], count))
+                else:
+                    print('{}\t{}'.format(row[0], count))
 
-            # for row in cur:
-            #     print(row)
-            #     word_cur = self.config.conn.execute("select lemma from word where wordid = '{}'".format(row[0]))
-            #     words = word_cur.fetchall()
-            #
-            #     print([row[0] for row in words])
-
-                # print('{}\t{}'.format(row[0], len(output)))
-
-        
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
