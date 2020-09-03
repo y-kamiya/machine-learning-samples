@@ -1,33 +1,41 @@
 import sys
+import os
 import argparse
 import heapq
 import random
+import torch
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from logzero import setup_logger
 from wikipedia2vec import Wikipedia2Vec
 
-class SimilarWordDetector():
-    CATEGORIES = ['ライブ','ポップ','カルチャー','社会','科学','技術','総合', '知識']
+class WordDataset(Dataset):
+    def __init__(self, model):
+        self.model = model
 
+    def __getitem__(self, index):
+        word = self.model.dictionary.get_word_by_index(index)
+        vector = self.model.get_vector(word)
+        return {'text': word.text, 'vector': torch.tensor(vector, dtype=torch.float32)}
+
+    def __len__(self):
+        return self.model.dictionary.word_size
+
+class SimilarWordDetector():
     def __init__(self, pkl_path, config):
         self.model = Wikipedia2Vec.load(pkl_path)
         self.config = config
 
     def execute(self):
-        for word in self.CATEGORIES:
+        output_dir = self.config.output_dir
+        os.makedirs(output_dir, exist_ok=True)
+
+        for word in self.config.search_words:
             print('original word: {}'.format(word))
             similar_words = self.similar_words(word)
-            for entry in similar_words:
-                print('{}\t{}'.format(entry[0], entry[1]))
-
-    def test(self):
-        print(self.model.dictionary.__dict__)
-        # words = self.model.dictionary.words()
-        # for i, word in enumerate(words):
-        #     if i == 10:
-        #         break
-        #     print(word)
-
+            with open('{}/{}.txt'.format(output_dir, word), 'w') as f:
+                for entry in similar_words:
+                    f.write('{}\t{:.3f}\n'.format(entry[0], entry[1]))
 
     def similar_words(self, original_word):
         model_dim = self.model.train_params['dim_size']
@@ -37,29 +45,36 @@ class SimilarWordDetector():
             return self.model.most_similar(self.model.get_word(original_word), n_top)
 
         sampling_dims = random.sample(range(0, model_dim), n_dim)
-        original_vector = self.model.get_word_vector(original_word)
+        original_vector = torch.tensor([self.model.get_word_vector(original_word)], dtype=torch.float32, device=self.config.device)
         original_vector = self.filter_vector(original_vector, sampling_dims)
 
-        queue = []
-        for word in self.model.dictionary.words():
-            vector = self.model.get_word_vector(word.text)
-            vector = self.filter_vector(vector, sampling_dims)
-            similarity = self.cos_sim(original_vector, vector)
-            heapq.heappush(queue, (-similarity, word))
+        dataset = WordDataset(self.model)
+        dataloader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=False)
 
-        words = []
-        for i in range(n_top):
-            similarity, word = heapq.heappop(queue)
-            words.append((word, -similarity))
+        all_similarities = torch.empty(0)
+        all_texts = []
+        for i, data in enumerate(dataloader):
+            texts = data['text']
+            vectors = data['vector'].to(self.config.device)
+            vectors = self.filter_vector(vectors, sampling_dims)
+            similarities = torch.cosine_similarity(vectors, original_vector)
+            all_similarities = torch.cat((all_similarities, similarities.cpu()))
+            all_texts.extend(texts)
+
+        topk = torch.topk(all_similarities, n_top)
+
+        data = []
+        for similarity, index in zip(topk[0], topk[1]):
+            data.append((all_texts[index], similarity))
         
-        return words
+        return data
         
-    def filter_vector(self, vector, indexes):
-        filter = np.zeros(self.model.train_params['dim_size'])
+    def filter_vector(self, tensor, indexes):
+        filter = torch.zeros(self.model.train_params['dim_size'], device=self.config.device)
         for index in indexes:
             filter[index] = 1
 
-        return vector * filter
+        return tensor * filter
 
     def cos_sim(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
@@ -68,18 +83,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('pkl_path', help='pretrained pkl file path')
     parser.add_argument('--loglevel', default='DEBUG')
+    parser.add_argument('--output_dir', default='output')
+    parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--n_dim', type=int, default=300, help='dimention to calculate similarity')
     parser.add_argument('--n_top', type=int, default=10, help='number of output words')
-    parser.add_argument('--test', action='store_true')
+    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--search_words', default=[], nargs='*')
     args = parser.parse_args()
+
+    is_cpu = args.cpu or not torch.cuda.is_available()
+    args.device_name = "cpu" if is_cpu else "cuda"
+    args.device = torch.device(args.device_name)
 
     logger = setup_logger(name=__name__, level=args.loglevel)
     logger.info(args)
     args.logger = logger
 
     detector = SimilarWordDetector(args.pkl_path, args)
-    if args.test:
-        detector.test()
-        sys.exit()
-
     detector.execute()
