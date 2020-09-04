@@ -33,19 +33,29 @@ class SimilarWordDetector():
         for word in self.config.search_words:
             print('original word: {}'.format(word))
             similar_words = self.similar_words(word)
+            if similar_words is None:
+                continue
+
             with open('{}/{}.txt'.format(output_dir, word), 'w') as f:
                 for entry in similar_words:
                     f.write('{}\t{:.3f}\n'.format(entry[0], entry[1]))
 
     def similar_words(self, original_word):
+        try:
+            original_vector = self.model.get_word_vector(original_word)
+        except KeyError:
+            print('{} is not included in word2vec'.format(original_word))
+            return None
+
         model_dim = self.model.train_params['dim_size']
         n_top = self.config.n_top
         n_dim = self.config.n_dim
+
         if model_dim <= n_dim:
             return self.model.most_similar(self.model.get_word(original_word), n_top)
 
         sampling_dims = random.sample(range(0, model_dim), n_dim)
-        original_vector = torch.tensor([self.model.get_word_vector(original_word)], dtype=torch.float32, device=self.config.device)
+        original_vector = torch.tensor([original_vector], dtype=torch.float32, device=self.config.device)
         original_vector = self.filter_vector(original_vector, sampling_dims)
 
         dataset = WordDataset(self.model)
