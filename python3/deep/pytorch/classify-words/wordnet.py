@@ -88,6 +88,11 @@ class Wordnet():
                 else:
                     print('{}\t{}'.format(row[0], count))
 
+    def collect_all_words(self):
+        cur = self.config.conn.execute("select lemma from word")
+        for row in cur:
+            print(row[0])
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
@@ -95,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--count_hypo_synsets', action='store_true', help='')
     parser.add_argument('--count_hypo_words', action='store_true', help='')
     parser.add_argument('--collect_synsets', default=None, help='')
+    parser.add_argument('--collect_all_words', action='store_true', help='')
     parser.add_argument('--loglevel', default='DEBUG')
     args = parser.parse_args()
 
@@ -115,5 +121,9 @@ if __name__ == '__main__':
 
     if args.collect_synsets is not None:
         wordnet.collect_synsets(args.collect_synsets)
+        sys.exit()
+
+    if args.collect_all_words:
+        wordnet.collect_all_words()
         sys.exit()
 
