@@ -96,8 +96,11 @@ class Trainer():
         self.writer.add_scalar('loss/eval', total_loss / n_data, epoch, time.time())
         self.writer.add_scalar('loss/acc', correct, epoch, time.time())
 
+        correct_rate = 100. * correct / n_data
         self.config.logger.info('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
-            correct, n_data, 100. * correct / n_data))
+            correct, n_data, correct_rate))
+
+        return correct_rate
 
 class Model_EscConv(nn.Module):
     def __init__(self):
@@ -271,19 +274,32 @@ if __name__ == '__main__':
 
     csv_path = f'{args.dataroot}/meta/esc50.csv'
     audio_dir = f'{args.dataroot}/audio'
-    if args.model_type == 'escconv':
-        train_dataset = LogmelDataset(csv_path, audio_dir, [1])
-        eval_dataset = LogmelDataset(csv_path, audio_dir, [5])
-    else:
-        train_dataset = WaveDataset(csv_path, audio_dir, [1])
-        eval_dataset = WaveDataset(csv_path, audio_dir, [5])
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=True)
 
-    trainer = Trainer(args)
+    correct_rates = []
+    n_folds = 5 # for dataset of ecs-50
+    for fold_head in range(n_folds):
+        train_folds = [(fold_head + i) % n_folds + 1 for i in range(n_folds - 1)]
+        eval_folds = [(fold_head + n_folds - 1) % n_folds + 1]
+        args.logger.debug(f'train folds: {train_folds}')
+        args.logger.debug(f'eval folds: {eval_folds}')
 
-    for epoch in range(1, args.epochs + 1):
-        trainer.train(train_loader, epoch)
-        trainer.eval(eval_loader, epoch)
-        trainer.update_epoch()
+        if args.model_type == 'escconv':
+            train_dataset = LogmelDataset(csv_path, audio_dir, train_folds)
+            eval_dataset = LogmelDataset(csv_path, audio_dir, eval_folds)
+        else:
+            train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
+            eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
 
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=True)
+
+        trainer = Trainer(args)
+
+        for epoch in range(1, args.epochs + 1):
+            trainer.train(train_loader, epoch)
+            rate = trainer.eval(eval_loader, epoch)
+            correct_rates.append(rate)
+            trainer.update_epoch()
+
+    args.logger.info(f'correct rates: {correct_rates}')
+    args.logger.info('correct rates average: {}'.format(sum(correct_rates) / n_folds))
