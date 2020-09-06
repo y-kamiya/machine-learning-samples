@@ -254,7 +254,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=8, help='epoch count')
     parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
-    parser.add_argument('--model_type', default=None, help='model type')
+    parser.add_argument('--model_type', default=None, choices=['escconv', 'm5'], help='model type')
     args = parser.parse_args()
     print(args)
 
