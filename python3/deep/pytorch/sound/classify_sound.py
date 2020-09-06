@@ -5,6 +5,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from logzero import setup_logger
 import torchaudio
 import pandas as pd
 import numpy as np
@@ -45,7 +46,6 @@ class Trainer():
             self.optimizer.zero_grad()
 
             output = self.model(data)
-            # print(output, target)
             loss = F.nll_loss(output, target)
             loss.backward()
             self.optimizer.step()
@@ -54,7 +54,7 @@ class Trainer():
             self.writer.add_scalar('loss/train', loss, n_processed_data, time.time())
 
             if batch_idx % self.config.log_interval == 0: #print training stats
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                self.config.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * self.config.batch_size, len(train_loader.dataset),
                     100. * batch_idx / len(train_loader), loss))
 
@@ -96,7 +96,7 @@ class Trainer():
         self.writer.add_scalar('loss/eval', total_loss / n_data, epoch, time.time())
         self.writer.add_scalar('loss/acc', correct, epoch, time.time())
 
-        print('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
+        self.config.logger.info('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
             correct, n_data, 100. * correct / n_data))
 
 class Model_EscConv(nn.Module):
@@ -253,10 +253,14 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='default', help='name of training, used to model name, log dir name etc')
     parser.add_argument('--batch_size', type=int, default=8, help='epoch count')
     parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
+    parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
     parser.add_argument('--model_type', default=None, choices=['escconv', 'm5'], help='model type')
     args = parser.parse_args()
-    print(args)
+
+    logger = setup_logger(name=__name__, level=args.loglevel)
+    logger.info(args)
+    args.logger = logger
 
     is_cpu = args.cpu or not torch.cuda.is_available()
     args.device_name = "cpu" if is_cpu else "cuda"
