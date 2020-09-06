@@ -89,6 +89,10 @@ class SimilarWordDetector():
     def cos_sim(self, v1, v2):
         return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
+    def collect_all_words(self):
+        for word in self.model.dictionary.words():
+            print(word.text)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('pkl_path', help='pretrained pkl file path')
@@ -99,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_top', type=int, default=10, help='number of output words')
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--search_words', default=[], nargs='*')
+    parser.add_argument('--collect_all_words', action='store_true')
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
@@ -110,4 +115,8 @@ if __name__ == '__main__':
     args.logger = logger
 
     detector = SimilarWordDetector(args.pkl_path, args)
+    if args.collect_all_words:
+        detector.collect_all_words()
+        sys.exit()
+
     detector.execute()
