@@ -295,11 +295,12 @@ if __name__ == '__main__':
 
         trainer = Trainer(args)
 
+        rate = 0.0
         for epoch in range(1, args.epochs + 1):
             trainer.train(train_loader, epoch)
             rate = trainer.eval(eval_loader, epoch)
-            correct_rates.append(rate)
             trainer.update_epoch()
+        correct_rates.append(rate)
 
     args.logger.info(f'correct rates: {correct_rates}')
     args.logger.info('correct rates average: {}'.format(sum(correct_rates) / n_folds))
