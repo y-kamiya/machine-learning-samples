@@ -13,9 +13,6 @@ import os
 import argparse
 import time
 import sys
-import librosa
-# import matplotlib.pyplot as plt
-# import librosa.display
 
 class Trainer():
     def __init__(self, config):
@@ -182,12 +179,12 @@ class BaseDataset(Dataset):
 
         csvData = pd.read_csv(csv_path)
 
-        self.file_names = []
+        self.filenames = []
         self.labels = []
 
         for i in range(0,len(csvData)):
             if csvData.iloc[i, 1] in folderList:
-                self.file_names.append(csvData.iloc[i, 0])
+                self.filenames.append(csvData.iloc[i, 0])
                 self.labels.append(csvData.iloc[i, 2])
                 
         self.audio_dir = audio_dir
@@ -196,13 +193,11 @@ class BaseDataset(Dataset):
         pass
 
     def __len__(self):
-        return len(self.file_names)
+        return len(self.filenames)
 
 class LogmelDataset(BaseDataset):
     def __init__(self, csv_path, audio_dir, folderList):
         super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
-
-        self.data = []
 
         frame_size = 512
         window_size = 1024
@@ -210,34 +205,23 @@ class LogmelDataset(BaseDataset):
         segment_size = frame_size * frame_per_segment
         step_size = segment_size // 2
 
-        transform = torchaudio.transforms.MelSpectrogram(sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60)
-
-        for index, name in enumerate(self.file_names):
-            # if index > 5:
-            #     break
-            path = os.path.join(self.audio_dir, name)
-            soundData, _ = librosa.load(path)
-            tensor = torch.tensor(soundData)
-
-            self.data.append((transform(tensor), self.labels[index]))
-
-            # start = 0
-            # clip = soundData[:, start:(start+segment_size)]
-            # while clip.shape[1] == segment_size:
-            #     mel = transform(clip)
-            #     self.data.append((mel, self.labels[index]))
-            #     start += step_size
-            #     clip = soundData[:, start:(start+segment_size)]
+        self.transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60)
 
     def __getitem__(self, index):
-        return self.data[index]
+        path = os.path.join(self.audio_dir, self.filenames[index])
+        # waveform, _ = librosa.load(path, sr=44100)
+        # tensor = torch.tensor(waveform).unsqueeze(0)
+        tensor, _ = torchaudio.load(path)
+
+        return self.transform(tensor), self.labels[index]
 
     def __len__(self):
-        return len(self.data)
+        return len(self.filenames)
 
 class WaveDataset(BaseDataset):
     def __getitem__(self, index):
-        path = os.path.join(self.audio_dir, self.file_names[index])
+        path = os.path.join(self.audio_dir, self.filenames[index])
         sound = torchaudio.load(path, out = None, normalization = True)
         soundData = sound[0].permute(1, 0)
 
