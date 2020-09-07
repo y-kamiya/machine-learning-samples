@@ -13,6 +13,7 @@ import os
 import argparse
 import time
 import sys
+import matplotlib.pyplot as plt
 
 class Trainer():
     def __init__(self, config):
@@ -205,14 +206,18 @@ class LogmelDataset(BaseDataset):
         segment_size = frame_size * frame_per_segment
         step_size = segment_size // 2
 
+        torchaudio.set_audio_backend('sox_io')
         self.transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60)
 
     def __getitem__(self, index):
         path = os.path.join(self.audio_dir, self.filenames[index])
-        # waveform, _ = librosa.load(path, sr=44100)
-        # tensor = torch.tensor(waveform).unsqueeze(0)
         tensor, _ = torchaudio.load(path)
+        # print(tensor.shape)
+        # plt.figure()
+        # plt.plot(tensor[0].numpy())
+        # plt.show()
+        # sys.exit()
 
         return self.transform(tensor), self.labels[index]
 
