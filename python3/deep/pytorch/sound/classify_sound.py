@@ -13,6 +13,9 @@ import os
 import argparse
 import time
 import sys
+import librosa
+# import matplotlib.pyplot as plt
+# import librosa.display
 
 class Trainer():
     def __init__(self, config):
@@ -213,9 +216,10 @@ class LogmelDataset(BaseDataset):
             # if index > 5:
             #     break
             path = os.path.join(self.audio_dir, name)
-            soundData, _ = torchaudio.load(path, out = None, normalization = True)
+            soundData, _ = librosa.load(path)
+            tensor = torch.tensor(soundData)
 
-            self.data.append((transform(soundData), self.labels[index]))
+            self.data.append((transform(tensor), self.labels[index]))
 
             # start = 0
             # clip = soundData[:, start:(start+segment_size)]
