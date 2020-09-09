@@ -13,7 +13,9 @@ import os
 import argparse
 import time
 import sys
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+# import librosa
+# import librosa.display
 
 class Trainer():
     def __init__(self, config):
@@ -45,8 +47,14 @@ class Trainer():
 
             data = data.requires_grad_()
             self.optimizer.zero_grad()
+            # plt.figure()
+            # print(data[0].shape)
+            # librosa.display.specshow(data[0][0].detach().numpy(), sr=22050, x_axis='time', y_axis='mel')
+            # plt.imshow(data.log2()[0][0,:,:].detach().numpy()) 
+            # plt.show()
 
             output = self.model(data)
+
             loss = F.nll_loss(output, target)
             loss.backward()
             self.optimizer.step()
@@ -208,17 +216,11 @@ class LogmelDataset(BaseDataset):
 
         torchaudio.set_audio_backend('sox_io')
         self.transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60)
+            sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True)
 
     def __getitem__(self, index):
         path = os.path.join(self.audio_dir, self.filenames[index])
         tensor, _ = torchaudio.load(path)
-        # print(tensor.shape)
-        # plt.figure()
-        # plt.plot(tensor[0].numpy())
-        # plt.show()
-        # sys.exit()
-
         return self.transform(tensor), self.labels[index]
 
     def __len__(self):
