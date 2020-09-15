@@ -6,10 +6,34 @@ import sqlite3
 
 sys.setrecursionlimit(10000)
 
+class WordnetModel():
+    def __init__(self, config):
+        self.config = config
+        self.conn = self.config.conn
+
+    def select_word_by_synset(self, synset):
+        query = (
+            "select synset.name, word.lemma " 
+            "from (synset inner join sense on synset.synset = sense.synset) "
+              "inner join word on sense.wordid = word.wordid "
+            "where synset.synset = '{}' and word.lang = 'jpn' "
+        ).format(synset)
+        return self.conn.execute(query)
+
+    def select_synset_by_word(self, word):
+        query = (
+            "select synset.synset, synset.name " 
+            "from (synset inner join sense on synset.synset = sense.synset) "
+              "inner join word on sense.wordid = word.wordid "
+            "where word.lemma = '{}' "
+        ).format(word)
+        return self.conn.execute(query)
+
 class Wordnet():
     def __init__(self, config):
         self.config = config
         self.cache_collect_words = {}
+        self.model = WordnetModel(config)
 
     def create_hierarchy(self):
         hierarchy = {}  # key:上位語(String), value:下位語(List of String)
@@ -69,9 +93,12 @@ class Wordnet():
             for row in cur:
                 print('{}\t{}'.format(row[0], len(output)))
 
-    def count_hypo_words(self):
+    def count_hypo_words(self, synsets=None):
         hierarchy = self.create_hierarchy()
-        for root_synset in hierarchy.keys():
+        if synsets is None:
+            synsets = hierarchy.keys()
+
+        for root_synset in synsets:
             synsets = self.__collect_synsets_recursive(root_synset, hierarchy)
 
             count = 0
@@ -79,7 +106,7 @@ class Wordnet():
                 cur = self.config.conn.execute("select wordid from sense where synset = '{}'".format(synset))
                 count += len(cur.fetchall())
 
-            cur = self.config.conn.execute("select synset.name, word.lemma from (synset inner join sense on synset.synset = sense.synset) inner join word on sense.wordid = word.wordid where synset.synset = '{}' and word.lang = 'jpn'".format(root_synset))
+            cur = self.model.select_word_by_synset(root_synset)
             data = cur.fetchall()
             if len(data) != 0:
                 row = data[0]
@@ -87,6 +114,26 @@ class Wordnet():
                     print('{}\t{}\t{}'.format(row[0], row[1], count))
                 else:
                     print('{}\t{}'.format(row[0], count))
+
+    def collect_hypo_words(self, word):
+        hierarchy = self.create_hierarchy()
+        output = self.__collect_synsets_recursive('08111783-n', hierarchy)
+        cur = self.model.select_synset_by_word(word)
+        data = cur.fetchall()
+        if len(data) == 0:
+            self.config.logger.info('{} is not found in wordnet'.format(word))
+            sys.exit()
+
+        for row in data:
+            self.config.logger.debug('synset with word({}): {}'.format(word, row))
+            root_synset = row[0]
+            synsets = self.__collect_synsets_recursive(root_synset, hierarchy)
+            self.config.logger.debug(synsets)
+            for synset in synsets:
+                cur = self.model.select_word_by_synset(synset)
+                print(synset)
+                for row in cur:
+                    print('{}\t{}\t{}'.format(synset, row[0], row[1]))
 
     def collect_all_words(self):
         cur = self.config.conn.execute("select lemma from word")
@@ -98,8 +145,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('db', help='db file')
     parser.add_argument('--count_hypo_synsets', action='store_true', help='')
-    parser.add_argument('--count_hypo_words', action='store_true', help='')
+    parser.add_argument('--count_hypo_words', choices=['all', 'top_concept'], default=None, help='')
     parser.add_argument('--collect_synsets', default=None, help='')
+    parser.add_argument('--collect_hypo_words', default=None, help='')
     parser.add_argument('--collect_all_words', action='store_true', help='')
     parser.add_argument('--loglevel', default='DEBUG')
     args = parser.parse_args()
@@ -115,12 +163,21 @@ if __name__ == '__main__':
         wordnet.count_hypo_synsets()
         sys.exit()
 
-    if args.count_hypo_words:
-        wordnet.count_hypo_words()
+    if args.count_hypo_words is not None:
+        hierarchy = wordnet.create_hierarchy()
+        synsets = None
+        if args.count_hypo_words == 'top_concept':
+            synsets = set(hierarchy.keys()) - set(sum(hierarchy.values(), []))
+
+        wordnet.count_hypo_words(synsets)
         sys.exit()
 
     if args.collect_synsets is not None:
         wordnet.collect_synsets(args.collect_synsets)
+        sys.exit()
+
+    if args.collect_hypo_words is not None:
+        wordnet.collect_hypo_words(args.collect_hypo_words)
         sys.exit()
 
     if args.collect_all_words:

@@ -31,20 +31,22 @@ class SimilarWordDetector():
         os.makedirs(output_dir, exist_ok=True)
 
         for word in self.config.search_words:
-            print('original word: {}'.format(word))
+            self.config.logger.info('original word: {}'.format(word))
             similar_words = self.similar_words(word)
             if similar_words is None:
                 continue
 
-            with open('{}/{}.txt'.format(output_dir, word), 'w') as f:
-                for entry in similar_words:
-                    f.write('{}\t{:.3f}\n'.format(entry[0], entry[1]))
+            for entry in similar_words:
+                text = getattr(entry[0], 'text', None)
+                if text is None:
+                    text = getattr(entry[0], 'title', None)
+                print('{:.3f}\t{}'.format(entry[1], text))
 
     def similar_words(self, original_word):
         try:
             original_vector = self.model.get_word_vector(original_word)
         except KeyError:
-            print('{} is not included in word2vec'.format(original_word))
+            self.config.logger.warning('{} is not included in word2vec'.format(original_word))
             return None
 
         model_dim = self.model.train_params['dim_size']
