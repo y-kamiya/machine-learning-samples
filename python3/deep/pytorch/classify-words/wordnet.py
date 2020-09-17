@@ -4,8 +4,6 @@ import argparse
 from logzero import setup_logger
 import sqlite3
 
-sys.setrecursionlimit(10000)
-
 class WordnetModel():
     def __init__(self, config):
         self.config = config
@@ -29,11 +27,21 @@ class WordnetModel():
         ).format(word)
         return self.conn.execute(query)
 
+    def select_hyper(self, synset):
+        query = (
+            "select synset1 from synlink where link='hypo' and synset2 = '{}'"
+        ).format(synset)
+        return self.conn.execute(query)
+
+
 class Wordnet():
     def __init__(self, config):
         self.config = config
         self.cache_collect_words = {}
         self.model = WordnetModel(config)
+
+        self.hierarchy = self.create_hierarchy()
+        self.reverse_hierarchy = self.create_reverse_hierarchy(self.hierarchy)
 
     def create_hierarchy(self):
         hierarchy = {}  # key:上位語(String), value:下位語(List of String)
@@ -50,6 +58,14 @@ class Wordnet():
 
         return hierarchy
 
+    def create_reverse_hierarchy(self, hierarchy):
+        reverse = {}
+        for parent, children in hierarchy.items():
+            for synset in children:
+                reverse[synset] = parent
+
+        return reverse
+
     def collect_synsets(self, name):
         hierarchy = wordnet.create_hierarchy()
         cur = self.config.conn.execute("select synset from synset where name = '{}'".format(name))
@@ -61,14 +77,17 @@ class Wordnet():
         output = set()
         for row in data:
             name = row[0]
-            output |= self.__collect_synsets_recursive(name, hierarchy)
+            output |= self.__collect_synsets_recursive(name, hierarchy, 0)
             print(output)
 
         query = 'select name from synset where synset in ({})'.format(','.join(f':{i}' for i in range(len(output))))
         cur = self.config.conn.execute(query, tuple(output))
         print([row[0] for row in cur.fetchall()])
 
-    def __collect_synsets_recursive(self, synset, hierarchy):
+    def __collect_synsets_recursive(self, synset, hierarchy, depth):
+        if 500 < depth:
+            return set()
+
         if synset not in hierarchy.keys():
             return set()
 
@@ -79,8 +98,9 @@ class Wordnet():
         hypos = set(hierarchy[synset])
         output |= hypos
 
+        depth += 1
         for hypo in hypos:
-            output |= self.__collect_synsets_recursive(hypo, hierarchy)
+            output |= self.__collect_synsets_recursive(hypo, hierarchy, depth)
 
         self.cache_collect_words[synset] = output
         return output
@@ -88,7 +108,7 @@ class Wordnet():
     def count_hypo_synsets(self):
         hierarchy = self.create_hierarchy()
         for synset in hierarchy.keys():
-            output = self.__collect_synsets_recursive(synset, hierarchy)
+            output = self.__collect_synsets_recursive(synset, hierarchy, 0)
             cur = self.config.conn.execute("select name from synset where synset = '{}'".format(synset))
             for row in cur:
                 print('{}\t{}'.format(row[0], len(output)))
@@ -98,22 +118,43 @@ class Wordnet():
         if synsets is None:
             synsets = hierarchy.keys()
 
-        for root_synset in synsets:
-            synsets = self.__collect_synsets_recursive(root_synset, hierarchy)
+        for target_synset in synsets:
+            synsets = self.__collect_synsets_recursive(target_synset, hierarchy, 0)
 
             count = 0
             for synset in synsets:
                 cur = self.config.conn.execute("select wordid from sense where synset = '{}'".format(synset))
                 count += len(cur.fetchall())
 
-            cur = self.model.select_word_by_synset(root_synset)
+            depth, root_synset_name = self.get_depth(target_synset, 0)
+
+            cur = self.model.select_word_by_synset(target_synset)
             data = cur.fetchall()
             if len(data) != 0:
                 row = data[0]
                 if len(row) == 2:
-                    print('{}\t{}\t{}'.format(row[0], row[1], count))
+                    print('{}\t{}\t{}\t{}({})'.format(row[0], row[1], count, root_synset_name, depth))
                 else:
-                    print('{}\t{}'.format(row[0], count))
+                    print('{}\tNone\t{}\t{}({})'.format(row[0], count, root_synset_name, depth))
+
+    def get_depth(self, target_synset, depth):
+        depth = 0
+        synsets = [target_synset]
+        synset = target_synset
+        while synset in self.reverse_hierarchy:
+            depth += 1
+            synset = self.reverse_hierarchy[synset]
+            if synset in synsets:
+                self.config.logger.error('circular reference: target_synset {}, current synset: {}'.format(target_synset, synset))
+                return 99999, synset
+            synsets.append(synset)
+
+        cur = self.model.select_word_by_synset(synset)
+        name = synset
+        for row in cur:
+            name = row[0]
+        self.config.logger.debug('END depth: {}, synset: {}'.format(depth, name))
+        return depth, name
 
     def collect_hypo_words(self, word):
         hierarchy = self.create_hierarchy()
