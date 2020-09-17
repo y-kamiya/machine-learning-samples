@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import argparse
 from logzero import setup_logger
 import sqlite3
+import csv
 
 class WordnetModel():
     def __init__(self, config):
@@ -25,6 +27,15 @@ class WordnetModel():
               "inner join word on sense.wordid = word.wordid "
             "where word.lemma = '{}' "
         ).format(word)
+        return self.conn.execute(query)
+
+    def select_synset_by_word_and_name(self, word, synset_name):
+        query = (
+            "select synset.synset, synset.name " 
+            "from (synset inner join sense on synset.synset = sense.synset) "
+              "inner join word on sense.wordid = word.wordid "
+            "where synset.name = '{}' and word.lemma = '{}' "
+        ).format(synset_name, word)
         return self.conn.execute(query)
 
     def select_hyper(self, synset):
@@ -156,30 +167,68 @@ class Wordnet():
         self.config.logger.debug('END depth: {}, synset: {}'.format(depth, name))
         return depth, name
 
-    def collect_hypo_words(self, word):
+    def collect_hypo_words(self, word, synset_name=None):
+        result = self.get_hypo_words(word, synset_name)
+        for synset, synset_name, word in result:
+            print('{}\t{}\t{}'.format(synset, synset_name, word))
+
+    def get_hypo_words(self, word, synset_name=None):
         hierarchy = self.create_hierarchy()
-        output = self.__collect_synsets_recursive('08111783-n', hierarchy)
-        cur = self.model.select_synset_by_word(word)
+        if synset_name is None:
+            cur = self.model.select_synset_by_word(word)
+        else:
+            cur = self.model.select_synset_by_word_and_name(word, synset_name)
         data = cur.fetchall()
         if len(data) == 0:
             self.config.logger.info('{} is not found in wordnet'.format(word))
             sys.exit()
 
+        result = []
         for row in data:
             self.config.logger.debug('synset with word({}): {}'.format(word, row))
             root_synset = row[0]
-            synsets = self.__collect_synsets_recursive(root_synset, hierarchy)
+            synset_name = row[1]
+            result.append((root_synset, synset_name, word))
+            synsets = self.__collect_synsets_recursive(root_synset, hierarchy, 0)
             self.config.logger.debug(synsets)
+
             for synset in synsets:
                 cur = self.model.select_word_by_synset(synset)
-                print(synset)
                 for row in cur:
-                    print('{}\t{}\t{}'.format(synset, row[0], row[1]))
+                    result.append((synset, row[0], row[1]))
+
+        return result
 
     def collect_all_words(self):
         cur = self.config.conn.execute("select lemma from word")
         for row in cur:
             print(row[0])
+
+    def collect_words_by_category(self, csv_fp):
+        os.makedirs(self.config.output_dir, exist_ok=True)
+        data = csv.reader(fp)
+        word_category_map = {}
+
+        for row in data:
+            synset_name = row[0]
+            word = row[1]
+            category = row[4]
+
+            result = self.get_hypo_words(word, synset_name)
+            for synset, synset_name, word in result:
+                word_category_map[word] = category
+                print('{}\t{}\t{}'.format(synset, synset_name, word))
+
+        category_word_map = {}
+        for word, category in word_category_map.items():
+            if category not in category_word_map:
+                category_word_map[category] = []
+            category_word_map[category].append(word)
+
+        for category, words in category_word_map.items():
+            output_path = os.path.join(self.config.output_dir, f'category{category}')
+            with open(output_path, 'w') as f:
+                f.write('\n'.join(words))
 
 
 if __name__ == '__main__':
@@ -190,6 +239,8 @@ if __name__ == '__main__':
     parser.add_argument('--collect_synsets', default=None, help='')
     parser.add_argument('--collect_hypo_words', default=None, help='')
     parser.add_argument('--collect_all_words', action='store_true', help='')
+    parser.add_argument('--collect_words_by_category', default=None, help='')
+    parser.add_argument('--output_dir', default='output', help='')
     parser.add_argument('--loglevel', default='DEBUG')
     args = parser.parse_args()
 
@@ -223,5 +274,10 @@ if __name__ == '__main__':
 
     if args.collect_all_words:
         wordnet.collect_all_words()
+        sys.exit()
+
+    if args.collect_words_by_category is not None:
+        with open(args.collect_words_by_category) as fp:
+            wordnet.collect_words_by_category(fp)
         sys.exit()
 
