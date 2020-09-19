@@ -227,8 +227,8 @@ class LogmelDataset(BaseDataset):
         torch.set_printoptions(threshold=500000)
         self.data = []
         for index, file in enumerate(self.filenames):
-            if index > 70:
-                break
+            # if index > 70:
+            #     break
             path = os.path.join(self.audio_dir, file)
             tensor, _ = torchaudio.load(path)
 
