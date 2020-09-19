@@ -45,7 +45,6 @@ class Trainer():
             data = data.to(device)
             target = target.to(device)
 
-            data = data.requires_grad_()
             self.optimizer.zero_grad()
             # plt.figure()
             # print(data[0].shape)
@@ -219,16 +218,33 @@ class LogmelDataset(BaseDataset):
             torchaudio.transforms.MelSpectrogram(
                 sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True),
             torchaudio.transforms.AmplitudeToDB(top_db=80.0),
-            transforms.Normalize(-30.0007, 21.8174),
+            # transforms.Normalize(-30.0007, 21.8174),
         ])
 
+        torch.set_printoptions(threshold=500000)
+        self.data = []
+        for index, file in enumerate(self.filenames):
+            if index > 70:
+                break
+            path = os.path.join(self.audio_dir, file)
+            tensor, _ = torchaudio.load(path)
+
+            start = 0
+            clip = tensor[:, start:(start+segment_size-1)]
+            while clip.shape[1] == segment_size-1:
+                mel = self.transforms(clip)
+                if -70.0 < torch.mean(mel):
+                    deltas = torchaudio.functional.compute_deltas(mel)
+                    data = torch.cat((mel, deltas), dim=0)
+                    self.data.append((data, self.labels[index]))
+                start += step_size
+                clip = tensor[:, start:(start+segment_size-1)]
+
     def __getitem__(self, index):
-        path = os.path.join(self.audio_dir, self.filenames[index])
-        tensor, _ = torchaudio.load(path)
-        return self.transforms(tensor), self.labels[index]
+        return self.data[index]
 
     def __len__(self):
-        return len(self.filenames)
+        return len(self.data)
 
 class WaveDataset(BaseDataset):
     def __getitem__(self, index):
