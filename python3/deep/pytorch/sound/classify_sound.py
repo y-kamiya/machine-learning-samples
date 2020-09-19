@@ -75,8 +75,8 @@ class Trainer():
 
     def __create_optimizer(self, model):
         if self.config.model_type == 'escconv':
-            return optim.Adam(model.parameters(), lr = 0.0001)
-            # return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
+            # return optim.Adam(model.parameters(), lr = 0.0001)
+            return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
         
         return optim.Adam(model.parameters(), lr = 0.01, weight_decay = 0.0001)
 
@@ -115,26 +115,29 @@ class Model_EscConv(nn.Module):
         super(Model_EscConv, self).__init__()
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 80, kernel_size=(57,6), stride=1),
-            nn.MaxPool2d((4,3), stride=(1,3)),
+            nn.Conv2d(2, 80, kernel_size=(57,6), stride=1),
+            nn.BatchNorm2d(80),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.MaxPool2d((4,3), stride=(1,3)),
+            # nn.Dropout(0.5),
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(80, 80, kernel_size=(1,3), stride=1),
-            nn.MaxPool2d((1,3), stride=(1,3)),
+            nn.BatchNorm2d(80),
             nn.ReLU(True),
+            nn.MaxPool2d((1,3), stride=(1,3)),
         )
         self.fc1 = nn.Sequential(
-            # nn.Linear(240, 5000),
-            nn.Linear(3680, 5000),
+            nn.Linear(240, 5000),
+            nn.BatchNorm1d(5000),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
         )
         self.fc2 = nn.Sequential(
             nn.Linear(5000, 50),
+            nn.BatchNorm1d(50),
             nn.ReLU(True),
-            nn.Dropout(0.5),
+            # nn.Dropout(0.5),
         )
 
     def forward(self, x):
