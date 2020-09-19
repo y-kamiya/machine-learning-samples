@@ -77,7 +77,7 @@ class Trainer():
     def __create_optimizer(self, model):
         if self.config.model_type == 'escconv':
             return optim.Adam(model.parameters(), lr = 0.0001)
-        #     return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
+            # return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
         
         return optim.Adam(model.parameters(), lr = 0.01, weight_decay = 0.0001)
 
@@ -210,18 +210,22 @@ class LogmelDataset(BaseDataset):
 
         frame_size = 512
         window_size = 1024
-        frame_per_segment = 40
+        frame_per_segment = 41
         segment_size = frame_size * frame_per_segment
         step_size = segment_size // 2
 
         torchaudio.set_audio_backend('sox_io')
-        self.transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True)
+        self.transforms = transforms.Compose([
+            torchaudio.transforms.MelSpectrogram(
+                sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True),
+            torchaudio.transforms.AmplitudeToDB(top_db=80.0),
+            transforms.Normalize(-30.0007, 21.8174),
+        ])
 
     def __getitem__(self, index):
         path = os.path.join(self.audio_dir, self.filenames[index])
         tensor, _ = torchaudio.load(path)
-        return self.transform(tensor), self.labels[index]
+        return self.transforms(tensor), self.labels[index]
 
     def __len__(self):
         return len(self.filenames)
