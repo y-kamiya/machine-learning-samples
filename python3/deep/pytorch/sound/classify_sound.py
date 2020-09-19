@@ -69,7 +69,7 @@ class Trainer():
     def __create_model(self):
         device = self.config.device
         if self.config.model_type == 'escconv':
-            return Model_EscConv().to(device)
+            return Model_EscConv(self.config).to(device)
         
         return Model_M5().to(device)
 
@@ -111,7 +111,7 @@ class Trainer():
         return correct_rate
 
 class Model_EscConv(nn.Module):
-    def __init__(self):
+    def __init__(self, config):
         super(Model_EscConv, self).__init__()
 
         self.conv1 = nn.Sequential(
@@ -127,8 +127,10 @@ class Model_EscConv(nn.Module):
             nn.ReLU(True),
             nn.MaxPool2d((1,3), stride=(1,3)),
         )
+
+        n_features = 240 if config.segmented else 3680
         self.fc1 = nn.Sequential(
-            nn.Linear(240, 5000),
+            nn.Linear(n_features, 5000),
             nn.BatchNorm1d(5000),
             nn.ReLU(),
             # nn.Dropout(0.5),
@@ -207,8 +209,9 @@ class BaseDataset(Dataset):
         return len(self.filenames)
 
 class LogmelDataset(BaseDataset):
-    def __init__(self, csv_path, audio_dir, folderList):
+    def __init__(self, config, csv_path, audio_dir, folderList):
         super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
+        self.config = config
 
         frame_size = 512
         window_size = 1024
@@ -221,27 +224,36 @@ class LogmelDataset(BaseDataset):
             torchaudio.transforms.MelSpectrogram(
                 sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True),
             torchaudio.transforms.AmplitudeToDB(top_db=80.0),
-            # transforms.Normalize(-30.0007, 21.8174),
         ])
 
-        torch.set_printoptions(threshold=500000)
         self.data = []
         for index, file in enumerate(self.filenames):
             # if index > 70:
             #     break
             path = os.path.join(self.audio_dir, file)
             tensor, _ = torchaudio.load(path)
+            if not self.config.segmented:
+                data, label = self.__create_data(index, tensor)
+                if data is not None:
+                    self.data.append((data, label))
+                continue
 
             start = 0
             clip = tensor[:, start:(start+segment_size-1)]
             while clip.shape[1] == segment_size-1:
-                mel = self.transforms(clip)
-                if -70.0 < torch.mean(mel):
-                    deltas = torchaudio.functional.compute_deltas(mel)
-                    data = torch.cat((mel, deltas), dim=0)
-                    self.data.append((data, self.labels[index]))
+                data, label = self.__create_data(index, clip)
+                if data is not None:
+                    self.data.append((data, label))
                 start += step_size
                 clip = tensor[:, start:(start+segment_size-1)]
+
+    def __create_data(self, index, wave):
+        mel = self.transforms(wave)
+        if torch.mean(mel) < -70.0:
+            return None, None
+        deltas = torchaudio.functional.compute_deltas(mel)
+        data = torch.cat((mel, deltas), dim=0)
+        return data, self.labels[index]
 
     def __getitem__(self, index):
         return self.data[index]
@@ -277,6 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
     parser.add_argument('--model_type', default=None, choices=['escconv', 'm5'], help='model type')
+    parser.add_argument('--segmented', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
