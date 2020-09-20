@@ -75,7 +75,9 @@ class Trainer():
 
     def __create_optimizer(self, model):
         if self.config.model_type == 'escconv':
-            # return optim.Adam(model.parameters(), lr = 0.0001)
+            if self.config.use_adam:
+                return optim.Adam(model.parameters(), lr = 0.002)
+
             return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
         
         return optim.Adam(model.parameters(), lr = 0.01, weight_decay = 0.0001)
@@ -318,6 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', default=None, choices=['escconv', 'm5'], help='model type')
     parser.add_argument('--segmented', action='store_true')
     parser.add_argument('--cross_validation', action='store_true')
+    parser.add_argument('--use_adam', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
