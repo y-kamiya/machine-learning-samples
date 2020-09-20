@@ -63,8 +63,8 @@ class Trainer():
 
             if batch_idx % self.config.log_interval == 0: #print training stats
                 self.config.logger.info('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * self.config.batch_size, len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader), loss))
+                    epoch, batch_idx * self.config.batch_size, len(dataloader.dataset),
+                    100. * batch_idx / len(dataloader), loss))
 
     def __create_model(self):
         device = self.config.device
@@ -279,6 +279,33 @@ class WaveDataset(BaseDataset):
         soundFormatted = soundFormatted.permute(1, 0)
         return soundFormatted, self.labels[index]
 
+def train(args, train_folds, eval_folds):
+    args.logger.debug(f'train folds: {train_folds}')
+    args.logger.debug(f'eval folds: {eval_folds}')
+
+    csv_path = f'{args.dataroot}/meta/esc50.csv'
+    audio_dir = f'{args.dataroot}/audio'
+
+    trainer = Trainer(args)
+
+    if args.model_type == 'escconv':
+        train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds)
+        eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds)
+    else:
+        train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
+        eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False)
+
+    accuracy = 0.0
+    for epoch in range(1, args.epochs + 1):
+        trainer.train(train_loader, epoch)
+        accuracy = trainer.eval(eval_loader, epoch)
+        trainer.update_epoch()
+
+    return accuracy
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--cpu', action='store_true', help='use cpu')
@@ -290,6 +317,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
     parser.add_argument('--model_type', default=None, choices=['escconv', 'm5'], help='model type')
     parser.add_argument('--segmented', action='store_true')
+    parser.add_argument('--cross_validation', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
@@ -303,35 +331,22 @@ if __name__ == '__main__':
     args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.name}'
     os.makedirs(args.tensorboard_log_dir, exist_ok=True)
 
-    csv_path = f'{args.dataroot}/meta/esc50.csv'
-    audio_dir = f'{args.dataroot}/audio'
+    if not args.cross_validation:
+        train_folds = [1,2,3,4]
+        eval_folds = [5]
+        accuracy = train(args, train_folds, eval_folds)
+        args.logger.info(f'accuracy: {accuracy}')
+        sys.exit()
 
-    correct_rates = []
+    accuracy_list = []
     n_folds = 5 # for dataset of ecs-50
     for fold_head in range(n_folds):
         train_folds = [(fold_head + i) % n_folds + 1 for i in range(n_folds - 1)]
         eval_folds = [(fold_head + n_folds - 1) % n_folds + 1]
-        args.logger.debug(f'train folds: {train_folds}')
-        args.logger.debug(f'eval folds: {eval_folds}')
 
-        if args.model_type == 'escconv':
-            train_dataset = LogmelDataset(csv_path, audio_dir, train_folds)
-            eval_dataset = LogmelDataset(csv_path, audio_dir, eval_folds)
-        else:
-            train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
-            eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
+        accuracy = train(args, train_folds, eval_folds)
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=True)
+        accuracy_list.append(accuracy)
 
-        trainer = Trainer(args)
-
-        rate = 0.0
-        for epoch in range(1, args.epochs + 1):
-            trainer.train(train_loader, epoch)
-            rate = trainer.eval(eval_loader, epoch)
-            trainer.update_epoch()
-        correct_rates.append(rate)
-
-    args.logger.info(f'correct rates: {correct_rates}')
-    args.logger.info('correct rates average: {}'.format(sum(correct_rates) / n_folds))
+    args.logger.info(f'accuracy list: {accuracy_list}')
+    args.logger.info('accuracy average: {}'.format(sum(accuracy_list) / n_folds))
