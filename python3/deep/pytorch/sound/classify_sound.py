@@ -101,14 +101,14 @@ class Trainer():
             total_loss += F.nll_loss(output, target, reduction='sum')
 
         n_data = len(dataloader.dataset)
+        accuracy = 100. * correct / n_data
         self.writer.add_scalar('loss/eval', total_loss / n_data, epoch, time.time())
-        self.writer.add_scalar('loss/acc', correct, epoch, time.time())
+        self.writer.add_scalar('loss/acc', accuracy, epoch, time.time())
 
-        correct_rate = 100. * correct / n_data
         self.config.logger.info('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
-            correct, n_data, correct_rate))
+            correct, n_data, accuracy))
 
-        return correct_rate
+        return accuracy
 
 class Model_EscConv(nn.Module):
     def __init__(self, config):
