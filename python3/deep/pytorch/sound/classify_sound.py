@@ -228,7 +228,8 @@ class LogmelDataset(BaseDataset):
             torchaudio.transforms.AmplitudeToDB(top_db=80.0),
         ])
 
-        self.data = []
+        self.data = torch.empty(0)
+        self.segment_labels = []
         for index, file in enumerate(self.filenames):
             # if index > 70:
             #     break
@@ -237,7 +238,8 @@ class LogmelDataset(BaseDataset):
             if not self.config.segmented:
                 data, label = self.__create_data(index, tensor)
                 if data is not None:
-                    self.data.append((data, label))
+                    self.data = torch.cat((self.data, data.unsqueeze(0)))
+                    self.segment_labels.append(label)
                 continue
 
             start = 0
@@ -245,20 +247,30 @@ class LogmelDataset(BaseDataset):
             while clip.shape[1] == segment_size-1:
                 data, label = self.__create_data(index, clip)
                 if data is not None:
-                    self.data.append((data, label))
+                    self.data = torch.cat((self.data, data.unsqueeze(0)))
+                    self.segment_labels.append(label)
                 start += step_size
                 clip = tensor[:, start:(start+segment_size-1)]
+
+        mean = self.data.mean()
+        std = self.data.std()
+
+        self.transforms_norm = transforms.Compose([
+            transforms.Normalize(mean, std),
+        ])
 
     def __create_data(self, index, wave):
         mel = self.transforms(wave)
         if torch.mean(mel) < -70.0:
             return None, None
-        deltas = torchaudio.functional.compute_deltas(mel)
-        data = torch.cat((mel, deltas), dim=0)
-        return data, self.labels[index]
+        return mel, self.labels[index]
 
     def __getitem__(self, index):
-        return self.data[index]
+        data = self.transforms_norm(self.data[index])
+        label = self.segment_labels[index]
+
+        deltas = torchaudio.functional.compute_deltas(data)
+        return torch.cat((data, deltas), dim=0), label
 
     def __len__(self):
         return len(self.data)
