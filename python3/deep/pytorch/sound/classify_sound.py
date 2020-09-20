@@ -76,11 +76,11 @@ class Trainer():
     def __create_optimizer(self, model):
         if self.config.model_type == 'escconv':
             if self.config.use_adam:
-                return optim.Adam(model.parameters(), lr = 0.002)
+                return optim.Adam(model.parameters(), lr=self.config.lr)
 
-            return optim.SGD(model.parameters(), momentum=0.9, lr=0.002, weight_decay=0.001, nesterov=True)
+            return optim.SGD(model.parameters(), momentum=0.9, lr=self.config.lr, weight_decay=0.001, nesterov=True)
         
-        return optim.Adam(model.parameters(), lr = 0.01, weight_decay = 0.0001)
+        return optim.Adam(model.parameters(), lr=self.config.lr, weight_decay=0.0001)
 
     def __create_scheduler(self, optimizer):
         if self.config.model_type == 'escconv':
@@ -314,6 +314,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataroot', default='data', help='path to data')
     parser.add_argument('--name', default='default', help='name of training, used to model name, log dir name etc')
     parser.add_argument('--batch_size', type=int, default=8, help='epoch count')
+    parser.add_argument('--lr', type=float, default=0.002)
     parser.add_argument('--log_interval', type=int, default=1, help='log interval epochs')
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--epochs', type=int, default=40, help='epoch count')
