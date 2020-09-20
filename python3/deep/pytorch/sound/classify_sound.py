@@ -58,7 +58,7 @@ class Trainer():
             loss.backward()
             self.optimizer.step()
 
-            n_processed_data = epoch * (batch_idx+1) * self.config.batch_size
+            n_processed_data = (epoch-1) * len(dataloader.dataset) + (batch_idx+1) * self.config.batch_size
             self.writer.add_scalar('loss/train', loss, n_processed_data, time.time())
 
             if batch_idx % self.config.log_interval == 0: #print training stats
