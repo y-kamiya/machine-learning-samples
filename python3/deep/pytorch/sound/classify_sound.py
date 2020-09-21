@@ -215,42 +215,51 @@ class LogmelDataset(BaseDataset):
         super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
         self.config = config
 
-        frame_size = 512
-        window_size = 1024
-        frame_per_segment = 41
-        segment_size = frame_size * frame_per_segment
-        step_size = segment_size // 2
+        data_cache_path = os.path.join(self.config.dataroot, self.__data_filename())
+        if not os.path.exists(data_cache_path):
+            frame_size = 512
+            window_size = 1024
+            frame_per_segment = 41
+            segment_size = frame_size * frame_per_segment
+            step_size = segment_size // 2
 
-        torchaudio.set_audio_backend('sox_io')
-        self.transforms = transforms.Compose([
-            torchaudio.transforms.MelSpectrogram(
-                sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True),
-            torchaudio.transforms.AmplitudeToDB(top_db=80.0),
-        ])
+            torchaudio.set_audio_backend('sox_io')
+            transforms_mel = transforms.Compose([
+                torchaudio.transforms.MelSpectrogram(
+                    sample_rate=22050, win_length=window_size, n_fft=window_size, hop_length=frame_size, n_mels=60, normalized=True),
+                torchaudio.transforms.AmplitudeToDB(top_db=80.0),
+            ])
 
-        self.data = torch.empty(0)
-        self.segment_labels = []
-        for index, file in enumerate(self.filenames):
-            # if index > 70:
-            #     break
-            path = os.path.join(self.audio_dir, file)
-            tensor, _ = torchaudio.load(path)
-            if not self.config.segmented:
-                data, label = self.__create_data(index, tensor)
-                if data is not None:
-                    self.data = torch.cat((self.data, data.unsqueeze(0)))
-                    self.segment_labels.append(label)
-                continue
+            self.data = torch.empty(0)
+            self.segment_labels = []
+            for index, file in enumerate(self.filenames):
+                path = os.path.join(self.audio_dir, file)
+                tensor, _ = torchaudio.load(path)
+                if not self.config.segmented:
+                    data, label = self.__create_data(index, tensor, transforms_mel)
+                    if data is not None:
+                        self.data = torch.cat((self.data, data.unsqueeze(0)))
+                        self.segment_labels.append(label)
+                    continue
 
-            start = 0
-            clip = tensor[:, start:(start+segment_size-1)]
-            while clip.shape[1] == segment_size-1:
-                data, label = self.__create_data(index, clip)
-                if data is not None:
-                    self.data = torch.cat((self.data, data.unsqueeze(0)))
-                    self.segment_labels.append(label)
-                start += step_size
+                start = 0
                 clip = tensor[:, start:(start+segment_size-1)]
+                while clip.shape[1] == segment_size-1:
+                    data, label = self.__create_data(index, clip, transforms_mel)
+                    if data is not None:
+                        self.data = torch.cat((self.data, data.unsqueeze(0)))
+                        self.segment_labels.append(label)
+                    start += step_size
+                    clip = tensor[:, start:(start+segment_size-1)]
+
+            torch.save({
+                'data': self.data,
+                'label': self.segment_labels,
+            }, data_cache_path)
+
+        loaded = torch.load(data_cache_path, map_location=torch.device(self.config.device_name))
+        self.data = loaded['data']
+        self.segment_labels = loaded['label']
 
         mean = self.data.mean()
         std = self.data.std()
@@ -259,8 +268,13 @@ class LogmelDataset(BaseDataset):
             transforms.Normalize(mean, std),
         ])
 
-    def __create_data(self, index, wave):
-        mel = self.transforms(wave)
+    def __data_filename(self):
+        if self.config.segmented:
+            return 'data.segmented.pth'
+        return 'data.pth'
+
+    def __create_data(self, index, wave, transforms):
+        mel = transforms(wave)
         if torch.mean(mel) < -70.0:
             return None, None
         return mel, self.labels[index]
