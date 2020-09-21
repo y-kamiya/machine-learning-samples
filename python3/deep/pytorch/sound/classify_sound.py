@@ -266,7 +266,9 @@ class LogmelDataset(BaseDataset):
         return mel, self.labels[index]
 
     def __getitem__(self, index):
-        data = self.transforms_norm(self.data[index])
+        data = self.data[index]
+        if self.config.normalized:
+            data = self.transforms_norm(data)
         label = self.segment_labels[index]
 
         deltas = torchaudio.functional.compute_deltas(data)
@@ -334,6 +336,7 @@ if __name__ == '__main__':
     parser.add_argument('--segmented', action='store_true')
     parser.add_argument('--cross_validation', action='store_true')
     parser.add_argument('--use_adam', action='store_true')
+    parser.add_argument('--normalized', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
