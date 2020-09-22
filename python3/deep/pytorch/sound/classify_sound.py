@@ -212,9 +212,10 @@ class BaseDataset(Dataset):
         return len(self.filenames)
 
 class LogmelDataset(BaseDataset):
-    def __init__(self, config, csv_path, audio_dir, folderList):
+    def __init__(self, config, csv_path, audio_dir, folderList, apply_augment=True):
         super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
         self.config = config
+        self.apply_augment = apply_augment
 
         data_cache_path = os.path.join(self.config.dataroot, self.__data_filename())
         if not os.path.exists(data_cache_path):
@@ -281,6 +282,9 @@ class LogmelDataset(BaseDataset):
         return mel, self.labels[index]
 
     def __augment(self, data):
+        if not self.apply_augment:
+            return data
+
         _, n_mel, n_time = data.shape
 
         mel_width = random.randint(0, self.config.augment_mel_width_max)
@@ -344,7 +348,7 @@ def train(args, train_folds, eval_folds):
 
     if args.model_type == 'escconv':
         train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds)
-        eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds)
+        eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds, False)
     else:
         train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
         eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
