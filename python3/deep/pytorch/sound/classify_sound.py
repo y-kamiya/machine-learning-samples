@@ -217,7 +217,7 @@ class LogmelDataset(BaseDataset):
         self.config = config
         self.apply_augment = apply_augment
 
-        data_cache_path = os.path.join(self.config.dataroot, self.__data_filename())
+        data_cache_path = os.path.join(self.config.dataroot, self.__data_filename(folderList))
         if not os.path.exists(data_cache_path):
             frame_size = 512
             window_size = 1024
@@ -270,10 +270,11 @@ class LogmelDataset(BaseDataset):
             transforms.Normalize(mean, std),
         ])
 
-    def __data_filename(self):
+    def __data_filename(self, folderList):
+        folder_str = ''.join([str(n) for n in folderList])
         if self.config.segmented:
-            return 'data.segmented.pth'
-        return 'data.pth'
+            return 'data{}.segmented.pth'.format(folder_str)
+        return 'data{}.pth'.format(folder_str)
 
     def __create_data(self, index, wave, transforms):
         mel = transforms(wave)
@@ -348,7 +349,9 @@ def train(args, train_folds, eval_folds):
 
     if args.model_type == 'escconv':
         train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds)
+        print(len(train_dataset))
         eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds, False)
+        print(len(eval_dataset))
     else:
         train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
         eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
