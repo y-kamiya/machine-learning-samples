@@ -13,6 +13,7 @@ import os
 import argparse
 import time
 import sys
+import random
 # import matplotlib.pyplot as plt
 # import librosa
 # import librosa.display
@@ -70,7 +71,7 @@ class Trainer():
         device = self.config.device
         if self.config.model_type == 'escconv':
             return Model_EscConv(self.config).to(device)
-        
+
         return Model_M5().to(device)
 
     def __create_optimizer(self, model):
@@ -79,7 +80,7 @@ class Trainer():
                 return optim.Adam(model.parameters(), lr=self.config.lr)
 
             return optim.SGD(model.parameters(), momentum=0.9, lr=self.config.lr, weight_decay=0.001, nesterov=True)
-        
+
         return optim.Adam(model.parameters(), lr=self.config.lr, weight_decay=0.0001)
 
     def __create_scheduler(self, optimizer):
@@ -169,7 +170,7 @@ class Model_M5(nn.Module):
         self.pool4 = nn.MaxPool1d(4)
         self.avgPool = nn.AvgPool1d(30) #input should be 512x30 so this outputs a 512x1
         self.fc1 = nn.Linear(512, 50)
-        
+
     def forward(self, x):
         x = self.conv1(x)
         x = F.relu(self.bn1(x))
@@ -201,7 +202,7 @@ class BaseDataset(Dataset):
             if csvData.iloc[i, 1] in folderList:
                 self.filenames.append(csvData.iloc[i, 0])
                 self.labels.append(csvData.iloc[i, 2])
-                
+
         self.audio_dir = audio_dir
 
     def __getitem__(self, index):
@@ -279,10 +280,33 @@ class LogmelDataset(BaseDataset):
             return None, None
         return mel, self.labels[index]
 
+    def __augment(self, data):
+        _, n_mel, n_time = data.shape
+
+        mel_width = random.randint(0, self.config.augment_mel_width_max)
+        mel_start = random.randint(0, n_mel - mel_width)
+        mel_end = mel_start + mel_width
+
+        time_width = random.randint(0, self.config.augment_time_width_max)
+        time_start = random.randint(0, n_time - time_width)
+        time_end = time_start + time_width
+
+        # fig = plt.figure()
+        # ax1 = fig.add_subplot(2, 1, 1)
+        # ax1.imshow(data[0].detach().numpy(), cmap='gray')
+        data[0][mel_start:mel_end, :] = 0
+        data[0][:, time_start:time_end] = 0
+        # ax2 = fig.add_subplot(2, 1, 2)
+        # ax2.imshow(data[0].detach().numpy(), cmap='gray')
+        # plt.show()
+        return data
+
     def __getitem__(self, index):
         data = self.data[index]
         if self.config.normalized:
             data = self.transforms_norm(data)
+
+        data = self.__augment(data)
         label = self.segment_labels[index]
 
         deltas = torchaudio.functional.compute_deltas(data)
@@ -302,7 +326,7 @@ class WaveDataset(BaseDataset):
             tempData[:soundData.numel()] = soundData[:]
         else:
             tempData[:] = soundData[:160000]
-        
+
         soundData = tempData
         soundFormatted = torch.zeros([32000, 1])
         soundFormatted[:32000] = soundData[::5] #take every fifth sample of soundData
@@ -351,6 +375,8 @@ if __name__ == '__main__':
     parser.add_argument('--cross_validation', action='store_true')
     parser.add_argument('--use_adam', action='store_true')
     parser.add_argument('--normalized', action='store_true')
+    parser.add_argument('--augment_mel_width_max', type=int, default=22)
+    parser.add_argument('--augment_time_width_max', type=int, default=30)
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
