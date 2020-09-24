@@ -348,7 +348,7 @@ def train(args, train_folds, eval_folds):
     trainer = Trainer(args)
 
     if args.model_type == 'escconv':
-        train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds)
+        train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds, args.use_augment)
         print(len(train_dataset))
         eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds, False)
         print(len(eval_dataset))
@@ -381,6 +381,7 @@ if __name__ == '__main__':
     parser.add_argument('--segmented', action='store_true')
     parser.add_argument('--cross_validation', action='store_true')
     parser.add_argument('--use_adam', action='store_true')
+    parser.add_argument('--use_augment', action='store_true')
     parser.add_argument('--normalized', action='store_true')
     parser.add_argument('--augment_mel_width_max', type=int, default=22)
     parser.add_argument('--augment_time_width_max', type=int, default=30)
