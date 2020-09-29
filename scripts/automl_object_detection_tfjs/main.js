@@ -1,18 +1,17 @@
-async function run() {
-    const img = document.getElementById('image');
-  
-    const canvas = document.getElementById('canvas');
+async function runInference(img) {
+    let canvas = document.createElement('canvas');
+    document.body.append(canvas);
     canvas.width = img.width;
     canvas.height = img.height;
+
+    const pre = document.createElement('pre');
+    document.body.append(pre);
     
     const model = await tf.automl.loadObjectDetection('model.json');
     const options = {score: 0.5, iou: 0.5, topk: 20};
     const predictions = await model.detect(img, options);
     console.log(predictions);
-    // Show the resulting object on the page.
-    const pre = document.createElement('pre');
     pre.textContent = JSON.stringify(predictions, null, 2);
-    document.body.append(pre);
   
     var context = canvas.getContext('2d');
     context.drawImage(img, 0, 0);
@@ -30,3 +29,27 @@ async function run() {
   
 }
 
+function readImages(files) {
+    imageTypes = ['image/jpeg', 'image/png'];
+
+    for (let i = 0; i < files.length; i++) {
+        let file = files[i];
+        console.log(file)
+
+        if (imageTypes.indexOf(file.type) == -1) {
+            continue;
+        }
+
+        let fileReader = new FileReader();
+        fileReader.onload = function() {
+            img = new Image();
+            img.src = fileReader.result;
+
+            img.addEventListener('load', function(e) {
+                runInference(e.target);
+            });
+        }
+
+        fileReader.readAsDataURL(file);
+    }
+}

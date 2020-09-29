@@ -2,12 +2,8 @@
 <script src="https://unpkg.com/@tensorflow/tfjs-automl"></script>
 <script src="main.js"></script>
 
-<style type="text/css">
-</style>
+<input id="dir" type="file" webkitdirectory directory onChange="readImages(this.files)">
 
-<img id="image" crossorigin="anonymous" src="dataset/val/plane.jpg" hidden="true">
-
-<body onload="run()">
-  <canvas id="canvas" class="canvas"></canvas>
+<body>
 </body>
 
