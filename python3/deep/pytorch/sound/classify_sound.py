@@ -42,7 +42,7 @@ class Trainer():
         self.model.train()
         device = self.config.device
 
-        for batch_idx, (data, target) in enumerate(dataloader):
+        for batch_idx, (data, target, _) in enumerate(dataloader):
             data = data.to(device)
             target = target.to(device)
 
@@ -95,17 +95,29 @@ class Trainer():
 
         correct = 0
         total_loss = 0
-        for data, target in dataloader:
+        n_data = dataloader.dataset.n_files()
+        probability_sum = torch.zeros(n_data, self.config.n_class).to(device)
+        file_labels = torch.zeros(n_data).to(device)
+
+        for data, target, file_ids in dataloader:
             data = data.to(device)
             target = target.to(device)
             output = self.model(data)
-            pred = output.max(1)[1]
-            correct += pred.eq(target).cpu().sum().item()
-            total_loss += F.nll_loss(output, target, reduction='sum')
 
-        n_data = len(dataloader.dataset)
+            # pred = output.max(1)[1]
+            # correct += pred.eq(target).cpu().sum().item()
+            # total_loss += F.nll_loss(output, target, reduction='sum')
+
+            for i, entry in enumerate(output):
+                file_id = file_ids[i]
+                probability_sum[file_id] += entry
+                file_labels[file_id] = target[i]
+
+        pred = probability_sum.max(1)[1]
+        correct += pred.eq(file_labels).cpu().sum().item()
+
         accuracy = 100. * correct / n_data
-        self.writer.add_scalar('loss/eval', total_loss / n_data, epoch, time.time())
+        
         self.writer.add_scalar('loss/acc', accuracy, epoch, time.time())
 
         self.config.logger.info('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
@@ -234,6 +246,7 @@ class LogmelDataset(BaseDataset):
 
             self.data = torch.empty(0)
             self.segment_labels = []
+            self.file_ids = []
             for index, file in enumerate(self.filenames):
                 path = os.path.join(self.audio_dir, file)
                 tensor, _ = torchaudio.load(path)
@@ -242,6 +255,7 @@ class LogmelDataset(BaseDataset):
                     if data is not None:
                         self.data = torch.cat((self.data, data.unsqueeze(0)))
                         self.segment_labels.append(label)
+                        self.file_ids.append(index)
                     continue
 
                 start = 0
@@ -251,17 +265,20 @@ class LogmelDataset(BaseDataset):
                     if data is not None:
                         self.data = torch.cat((self.data, data.unsqueeze(0)))
                         self.segment_labels.append(label)
+                        self.file_ids.append(index)
                     start += step_size
                     clip = tensor[:, start:(start+segment_size-1)]
 
             torch.save({
                 'data': self.data,
                 'label': self.segment_labels,
+                'file_ids': self.file_ids,
             }, data_cache_path)
 
         loaded = torch.load(data_cache_path, map_location=torch.device(self.config.device_name))
         self.data = loaded['data']
         self.segment_labels = loaded['label']
+        self.file_ids = loaded['file_ids']
 
         mean = self.data.mean()
         std = self.data.std()
@@ -269,6 +286,9 @@ class LogmelDataset(BaseDataset):
         self.transforms_norm = transforms.Compose([
             transforms.Normalize(mean, std),
         ])
+
+    def n_files(self):
+        return len(self.filenames)
 
     def __data_filename(self, folderList):
         folder_str = ''.join([str(n) for n in folderList])
@@ -315,7 +335,7 @@ class LogmelDataset(BaseDataset):
         label = self.segment_labels[index]
 
         deltas = torchaudio.functional.compute_deltas(data)
-        return torch.cat((data, deltas), dim=0), label
+        return torch.cat((data, deltas), dim=0), label, self.file_ids[index]
 
     def __len__(self):
         return len(self.data)
@@ -349,9 +369,7 @@ def train(args, train_folds, eval_folds):
 
     if args.model_type == 'escconv':
         train_dataset = LogmelDataset(args, csv_path, audio_dir, train_folds, args.use_augment)
-        print(len(train_dataset))
         eval_dataset = LogmelDataset(args, csv_path, audio_dir, eval_folds, False)
-        print(len(eval_dataset))
     else:
         train_dataset = WaveDataset(csv_path, audio_dir, train_folds)
         eval_dataset = WaveDataset(csv_path, audio_dir, eval_folds)
@@ -385,6 +403,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalized', action='store_true')
     parser.add_argument('--augment_mel_width_max', type=int, default=22)
     parser.add_argument('--augment_time_width_max', type=int, default=30)
+    parser.add_argument('--n_class', type=int, default=50)
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
