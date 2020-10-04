@@ -14,9 +14,6 @@ import argparse
 import time
 import sys
 import random
-# import matplotlib.pyplot as plt
-# import librosa
-# import librosa.display
 
 class Trainer():
     def __init__(self, config):
@@ -47,11 +44,6 @@ class Trainer():
             target = target.to(device)
 
             self.optimizer.zero_grad()
-            # plt.figure()
-            # print(data[0].shape)
-            # librosa.display.specshow(data[0][0].detach().numpy(), sr=22050, x_axis='time', y_axis='mel')
-            # plt.imshow(data.log2()[0][0,:,:].detach().numpy())
-            # plt.show()
 
             output = self.model(data)
 
@@ -103,10 +95,6 @@ class Trainer():
             data = data.to(device)
             target = target.to(device)
             output = self.model(data)
-
-            # pred = output.max(1)[1]
-            # correct += pred.eq(target).cpu().sum().item()
-            # total_loss += F.nll_loss(output, target, reduction='sum')
 
             for i, entry in enumerate(output):
                 file_id = file_ids[i]
@@ -325,14 +313,8 @@ class LogmelDataset(BaseDataset):
         time_start = random.randint(0, n_time - time_width)
         time_end = time_start + time_width
 
-        # fig = plt.figure()
-        # ax1 = fig.add_subplot(2, 1, 1)
-        # ax1.imshow(data[0].detach().numpy(), cmap='gray')
         data[0][mel_start:mel_end, :] = 0
         data[0][:, time_start:time_end] = 0
-        # ax2 = fig.add_subplot(2, 1, 2)
-        # ax2.imshow(data[0].detach().numpy(), cmap='gray')
-        # plt.show()
         return data
 
     def __getitem__(self, index):
