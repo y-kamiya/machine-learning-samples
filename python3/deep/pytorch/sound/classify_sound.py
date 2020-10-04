@@ -50,7 +50,7 @@ class Trainer():
             # plt.figure()
             # print(data[0].shape)
             # librosa.display.specshow(data[0][0].detach().numpy(), sr=22050, x_axis='time', y_axis='mel')
-            # plt.imshow(data.log2()[0][0,:,:].detach().numpy()) 
+            # plt.imshow(data.log2()[0][0,:,:].detach().numpy())
             # plt.show()
 
             output = self.model(data)
@@ -117,7 +117,7 @@ class Trainer():
         correct += pred.eq(file_labels).cpu().sum().item()
 
         accuracy = 100. * correct / n_data
-        
+
         self.writer.add_scalar('loss/acc', accuracy, epoch, time.time())
 
         self.config.logger.info('\nTest set: Accuracy: {}/{} ({:.0f}%)\n'.format(
@@ -129,33 +129,42 @@ class Model_EscConv(nn.Module):
     def __init__(self, config):
         super(Model_EscConv, self).__init__()
 
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(2, 80, kernel_size=(57,6), stride=1),
-            nn.BatchNorm2d(80),
-            nn.ReLU(),
-            nn.MaxPool2d((4,3), stride=(1,3)),
-            # nn.Dropout(0.5),
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(80, 80, kernel_size=(1,3), stride=1),
-            nn.BatchNorm2d(80),
-            nn.ReLU(True),
-            nn.MaxPool2d((1,3), stride=(1,3)),
-        )
+        dropout = 1.0 if config.batchnorm else 0.5
+        self.conv1 = self.__conv(2, 80, (57,6), (4,3), dropout)
+        self.conv2 = self.__conv(80, 80, (1,3), (1,3))
 
         n_features = 240 if config.segmented else 3680
-        self.fc1 = nn.Sequential(
-            nn.Linear(n_features, 5000),
-            nn.BatchNorm1d(5000),
-            nn.ReLU(),
-            # nn.Dropout(0.5),
-        )
-        self.fc2 = nn.Sequential(
-            nn.Linear(5000, 50),
-            nn.BatchNorm1d(50),
-            nn.ReLU(True),
-            # nn.Dropout(0.5),
-        )
+        self.fc1 = self.__linear(n_features, 5000, dropout)
+        self.fc2 = self.__linear(5000, 50, dropout)
+
+    def __conv(self, n_input, n_output, conv_kernel, pool_kernel, dropout=1.0):
+        list = [
+            nn.Conv2d(n_input, n_output, kernel_size=conv_kernel, stride=1),
+        ]
+        if dropout == 1.0:
+            list.append(nn.BatchNorm2d(n_output))
+
+        list.append(nn.ReLU(True))
+        list.append(nn.MaxPool2d(pool_kernel, stride=(1,3)))
+
+        if dropout != 1.0:
+            list.append(nn.Dropout(dropout))
+
+        return nn.Sequential(*list)
+
+    def __linear(self, n_input, n_output, dropout=1.0):
+        list = [
+            nn.Linear(n_input, n_output),
+        ]
+        if dropout == 1.0:
+            list.append(nn.BatchNorm1d(n_output))
+
+        list.append(nn.ReLU(True))
+
+        if dropout != 1.0:
+            list.append(nn.Dropout(dropout))
+
+        return nn.Sequential(*list)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -356,7 +365,7 @@ class WaveDataset(BaseDataset):
         soundFormatted = torch.zeros([32000, 1])
         soundFormatted[:32000] = soundData[::5] #take every fifth sample of soundData
         soundFormatted = soundFormatted.permute(1, 0)
-        return soundFormatted, self.labels[index]
+        return soundFormatted, self.labels[index], index
 
 def train(args, train_folds, eval_folds):
     args.logger.debug(f'train folds: {train_folds}')
@@ -404,6 +413,7 @@ if __name__ == '__main__':
     parser.add_argument('--augment_mel_width_max', type=int, default=22)
     parser.add_argument('--augment_time_width_max', type=int, default=30)
     parser.add_argument('--n_class', type=int, default=50)
+    parser.add_argument('--batchnorm', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
