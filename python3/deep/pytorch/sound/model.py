@@ -87,4 +87,55 @@ class M5(nn.Module):
         x = self.fc1(x)
         return F.log_softmax(x, dim = 2).permute(1, 0, 2).squeeze()
 
+class EnvNet(nn.Module):
+    def __init__(self, config):
+        super(EnvNet, self).__init__()
+
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(1, 40, kernel_size=8, stride=1, padding=4),
+            nn.BatchNorm1d(40)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(40, 40, kernel_size=8, stride=1, padding=4),
+            nn.BatchNorm1d(40)
+        )
+        self.pool2 = nn.MaxPool1d(kernel_size=160)
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(1, 50, kernel_size=(8, 13), stride=(1, 1)),
+            nn.BatchNorm2d(50)
+        )
+        self.pool3 = nn.MaxPool2d(kernel_size=(3, 3))
+
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(50, 50, kernel_size=(1, 5), stride=(1, 1)),
+            nn.BatchNorm2d(50)
+        )
+        self.pool4 = nn.MaxPool2d(kernel_size=(1, 3))
+
+        self.fc5 = nn.Sequential(
+            nn.Linear(50 * 11 * 14, 4096),
+            nn.Dropout(0.5)
+        )
+
+        self.fc6 = nn.Sequential(
+            nn.Linear(4096, 4096),
+            nn.Dropout(0.5)
+        )
+
+        self.output = nn.Linear(4096, config.n_class)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = self.pool2(x)
+        x = x.unsqueeze(1)
+        x = F.relu(self.conv3(x))
+        x = self.pool3(x)
+        x = F.relu(self.conv4(x))
+        x = self.pool4(x)
+        x = x.view(x.shape[0], -1)
+        x = F.relu(self.fc5(x))
+        x = F.relu(self.fc6(x))
+        return self.output(x)
 

@@ -4,10 +4,12 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset
 import pandas as pd
 import os
+import random
 
 class BaseDataset(Dataset):
-    def __init__(self, csv_path, audio_dir, folderList):
+    def __init__(self, config, csv_path, audio_dir, folderList):
         super(BaseDataset, self).__init__()
+        self.config = config
 
         csvData = pd.read_csv(csv_path)
 
@@ -21,6 +23,9 @@ class BaseDataset(Dataset):
 
         self.audio_dir = audio_dir
 
+    def n_files(self):
+        return len(self.filenames)
+
     def __getitem__(self, index):
         pass
 
@@ -29,8 +34,7 @@ class BaseDataset(Dataset):
 
 class LogmelDataset(BaseDataset):
     def __init__(self, config, csv_path, audio_dir, folderList, apply_augment=True):
-        super(LogmelDataset, self).__init__(csv_path, audio_dir, folderList)
-        self.config = config
+        super(LogmelDataset, self).__init__(config, csv_path, audio_dir, folderList)
         self.apply_augment = apply_augment
 
         data_cache_path = os.path.join(self.config.dataroot, self.__data_filename(folderList))
@@ -90,9 +94,6 @@ class LogmelDataset(BaseDataset):
         self.transforms_norm = transforms.Compose([
             transforms.Normalize(mean, std),
         ])
-
-    def n_files(self):
-        return len(self.filenames)
 
     def __data_filename(self, folderList):
         folder_str = ''.join([str(n) for n in folderList])
@@ -156,3 +157,34 @@ class WaveDataset(BaseDataset):
         soundFormatted = soundFormatted.permute(1, 0)
         return soundFormatted, self.labels[index], index
 
+class EnvNetDataset(BaseDataset):
+    def __init__(self, config, csv_path, audio_dir, folderList):
+        super(EnvNetDataset, self).__init__(config, csv_path, audio_dir, folderList)
+
+        trans = transforms.Compose([
+            torchaudio.transforms.Resample(44100, 16000)
+        ])
+        self.section_length = int(16000 * 1.5)
+
+        self.sounds = []
+        for file in self.filenames:
+            path = os.path.join(self.audio_dir, file)
+            sound = torchaudio.load(path, out = None, normalization = True)
+            resampled = trans(sound[0].squeeze())
+            resampled /= torch.max(torch.abs(resampled))
+            self.sounds.append(resampled)
+
+    def __getitem__(self, index):
+        resampled = self.sounds[index]
+
+        max_iter = 10000
+        for i in range(max_iter):
+            start = random.randint(0, len(resampled) - self.section_length)
+            data = resampled[start : start + self.section_length]
+            if 0.2 < torch.max(data):
+                break
+
+        if i == max_iter - 1:
+            self.config.logger.warning("valid section is not found: {}".format(path))
+
+        return data.unsqueeze(0), self.labels[index], index
