@@ -164,27 +164,58 @@ class EnvNetDataset(BaseDataset):
         trans = transforms.Compose([
             torchaudio.transforms.Resample(44100, 16000)
         ])
-        self.section_length = int(16000 * 1.5)
+        self.segment_size = int(16000 * 1.5)
 
         self.sounds = []
-        for file in self.filenames:
+        for i, file in enumerate(self.filenames):
             path = os.path.join(self.audio_dir, file)
             sound = torchaudio.load(path, out = None, normalization = True)
             resampled = trans(sound[0].squeeze())
             resampled /= torch.max(torch.abs(resampled))
             self.sounds.append(resampled)
 
+    def is_enough_amplitude(self, data):
+        return 0.2 < torch.max(torch.abs(data))
+
     def __getitem__(self, index):
         resampled = self.sounds[index]
 
         max_iter = 10000
         for i in range(max_iter):
-            start = random.randint(0, len(resampled) - self.section_length)
-            data = resampled[start : start + self.section_length]
-            if 0.2 < torch.max(data):
+            start = random.randint(0, len(resampled) - self.segment_size)
+            data = resampled[start : start + self.segment_size]
+            if self.is_enough_amplitude(data):
                 break
 
         if i == max_iter - 1:
             self.config.logger.warning("valid section is not found: {}".format(path))
 
         return data.unsqueeze(0), self.labels[index], index
+
+class EnvNetEvalDataset(EnvNetDataset):
+    def __init__(self, config, csv_path, audio_dir, folderList):
+        super(EnvNetEvalDataset, self).__init__(config, csv_path, audio_dir, folderList)
+
+        step_size = int(16000 * 0.2)
+        self.sounds_segmented = []
+        self.labels_segmented = []
+        self.file_ids = []
+
+        for index, sound in enumerate(self.sounds):
+            start = 0
+            clip = sound[start:(start+self.segment_size)]
+            while clip.shape[0] == self.segment_size:
+                if self.is_enough_amplitude(clip):
+                    self.sounds_segmented.append(clip.unsqueeze(0))
+                    self.labels_segmented.append(self.labels[index])
+                    self.file_ids.append(index)
+
+                start += step_size
+                clip = sound[start:(start+self.segment_size)]
+
+    def __getitem__(self, index):
+        return self.sounds_segmented[index], self.labels_segmented[index], self.file_ids[index]
+
+    def __len__(self):
+        return len(self.sounds_segmented)
+

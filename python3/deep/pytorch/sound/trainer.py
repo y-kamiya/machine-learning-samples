@@ -155,7 +155,7 @@ def train(args, train_folds, eval_folds):
         eval_dataset = dataset.LogmelDataset(args, csv_path, audio_dir, eval_folds, False)
     elif args.model_type == 'envnet':
         train_dataset = dataset.EnvNetDataset(args, csv_path, audio_dir, train_folds)
-        eval_dataset = dataset.EnvNetDataset(args, csv_path, audio_dir, eval_folds)
+        eval_dataset = dataset.EnvNetEvalDataset(args, csv_path, audio_dir, eval_folds)
     else:
         train_dataset = dataset.WaveDataset(args, csv_path, audio_dir, train_folds)
         eval_dataset = dataset.WaveDataset(args, csv_path, audio_dir, eval_folds)
