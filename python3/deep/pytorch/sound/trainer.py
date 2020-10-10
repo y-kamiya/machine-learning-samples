@@ -161,7 +161,7 @@ def train(args, train_folds, eval_folds):
         eval_dataset = dataset.WaveDataset(args, csv_path, audio_dir, eval_folds)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False)
+    eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False)
 
     accuracy = 0.0
     for epoch in range(1, args.epochs + 1):
