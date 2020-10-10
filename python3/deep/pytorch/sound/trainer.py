@@ -109,6 +109,7 @@ class Trainer():
 
         return optim.lr_scheduler.StepLR(self.optimizer, step_size = 20, gamma = 0.1)
 
+    @torch.no_grad()
     def eval(self, dataloader, epoch):
         self.model.eval()
         device = self.config.device
@@ -116,6 +117,7 @@ class Trainer():
         correct = 0
         total_loss = 0
         n_data = dataloader.dataset.n_files()
+
         probability_sum = torch.zeros(n_data, self.config.n_class).to(device)
         file_labels = torch.zeros(n_data).to(device)
 
