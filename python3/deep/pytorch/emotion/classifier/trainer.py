@@ -58,7 +58,7 @@ class Trainer:
         self.config = config
 
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', padding=True)
-        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=config.n_labels, return_dict=True)
+        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=config.n_labels, return_dict=True).to(config.device)
         self.optimizer = AdamW(self.model.parameters(), lr=1e-5)
 
         data_train= EmotionDataset(self.config, 'train')
@@ -74,7 +74,9 @@ class Trainer:
 
         for i, (texts, labels) in enumerate(self.dataloader_train):
             start_time = time.time()
-            inputs = self.tokenizer(texts, return_tensors='pt', padding=True)
+            inputs = self.tokenizer(texts, return_tensors='pt', padding=True).to(self.config.device)
+            labels = labels.to(self.config.device)
+
             outputs = self.model(**inputs, labels=labels)
 
             self.optimizer.zero_grad()
@@ -95,11 +97,13 @@ class Trainer:
         start_time = time.time()
 
         for i, (texts, labels) in enumerate(self.dataloader_eval):
-            inputs = self.tokenizer(texts, return_tensors='pt', padding=True)
+            inputs = self.tokenizer(texts, return_tensors='pt', padding=True).to(self.config.device)
+            labels = labels.to(self.config.device)
+
             outputs = self.model(**inputs, labels=labels)
 
             preds = torch.argmax(outputs.logits, dim=1)
-            n_correct += (preds == labels).sum().item()
+            n_correct += (preds == labels).sum().cpu().item()
             losses.append(outputs.loss)
 
         elapsed_time = time.time() - start_time
@@ -113,6 +117,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--n_labels', type=int, default=6, help='number of classes to train')
     parser.add_argument('--dataroot', default='data', help='path to data directory')
@@ -120,6 +125,10 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=64, help='size of batch')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
     args = parser.parse_args()
+
+    is_cpu = args.cpu or not torch.cuda.is_available()
+    args.device_name = "cpu" if is_cpu else "cuda:0"
+    args.device = torch.device(args.device_name)
 
     logger = setup_logger(name=__name__, level=args.loglevel)
     logger.info(args)
