@@ -2,6 +2,7 @@ import os
 import io
 import csv
 import time
+import uuid
 import argparse
 import torch
 from torch import nn
@@ -66,6 +67,8 @@ class Trainer:
         data_eval= EmotionDataset(self.config, 'eval')
         self.dataloader_eval = DataLoader(data_eval, batch_size=self.config.batch_size, shuffle=True)
 
+        self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
+
     def train(self, epoch):
         self.model.train()
 
@@ -81,10 +84,14 @@ class Trainer:
             elapsed_time = time.time() - start_time
             self.config.logger.info('train epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, outputs.loss, elapsed_time))
 
+            self.writer.add_scalar('loss/train', outputs.loss, epoch, start_time)
+
+    @torch.no_grad()
     def eval(self, epoch):
         self.model.eval()
 
         n_correct = 0
+        losses = []
         start_time = time.time()
 
         for i, (texts, labels) in enumerate(self.dataloader_eval):
@@ -93,11 +100,15 @@ class Trainer:
 
             preds = torch.argmax(outputs.logits, dim=1)
             n_correct += (preds == labels).sum().item()
+            losses.append(outputs.loss)
 
         elapsed_time = time.time() - start_time
         n_all = len(self.dataloader_eval.dataset)
         accuracy = n_correct / n_all
         self.config.logger.info('eval epoch: {}, accuracy: {:.3f} ({}/{}), time: {:.2f}'.format(epoch, accuracy, n_correct, n_all, elapsed_time))
+
+        self.writer.add_scalar('loss/eval', sum(losses)/len(losses), epoch, start_time)
+        self.writer.add_scalar('loss/acc', accuracy, epoch, start_time)
 
 
 if __name__ == '__main__':
@@ -113,6 +124,8 @@ if __name__ == '__main__':
     logger = setup_logger(name=__name__, level=args.loglevel)
     logger.info(args)
     args.logger = logger
+
+    args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.dataset_name}_{str(uuid.uuid4())[:8]}'
 
     trainer = Trainer(args)
 
