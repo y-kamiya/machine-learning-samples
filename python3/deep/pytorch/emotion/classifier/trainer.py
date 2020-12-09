@@ -6,6 +6,7 @@ import time
 import uuid
 import argparse
 import torch
+import apex
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -69,6 +70,9 @@ class Trainer:
 
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
 
+        if config.fp16:
+            self.model, self.optimizer = apex.amp.initialize(self.model, self.optimizer, 'O1')
+
     def train(self, epoch):
         self.model.train()
 
@@ -79,9 +83,14 @@ class Trainer:
 
             outputs = self.model(**inputs, labels=labels)
 
-            self.optimizer.zero_grad()
-            outputs.loss.backward()
+            if self.config.fp16:
+                with apex.amp.scale_loss(outputs.loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                outputs.loss.backward()
+
             self.optimizer.step()
+            self.optimizer.zero_grad()
 
             elapsed_time = time.time() - start_time
             self.config.logger.info('train epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, outputs.loss, elapsed_time))
@@ -124,6 +133,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_name', default='default', help='dataset name')
     parser.add_argument('--batch_size', type=int, default=64, help='size of batch')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
+    parser.add_argument('--fp16', action='store_true', help='run model with float16')
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
