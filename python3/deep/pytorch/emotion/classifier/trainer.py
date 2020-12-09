@@ -1,3 +1,4 @@
+import sys
 import os
 import io
 import csv
@@ -16,10 +17,9 @@ class EmotionDataset(Dataset):
     label_index_map = {
         'anger': 0,
         'disgust': 1,
-        'fear': 2,
-        'joy': 3,
-        'sadness': 4,
-        'surprise': 5,
+        'joy': 2,
+        'sadness': 3,
+        'surprise': 4,
     }
 
     def __init__(self, config, phase):
