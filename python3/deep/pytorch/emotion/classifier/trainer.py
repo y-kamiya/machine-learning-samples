@@ -38,15 +38,6 @@ class EmotionDataset(Dataset):
                 self.texts.append(text)
                 self.labels.append(self.label_index_map[label_name])
 
-        # self.dataset = data.TabularDataset(
-        #     path=os.path.join(config.dataroot, config.dataset_name, f'{phase}.txt'),
-        #     format='tsv',
-        #     fields=[
-        #         ('data', data.Field(tokenize=tokenizer)),
-        #         ('label', data.Field(sequential=False)),
-        #     ]
-        # )
-
     def __getitem__(self, index):
         return self.texts[index], self.labels[index]
 
@@ -58,8 +49,9 @@ class Trainer:
     def __init__(self, config):
         self.config = config
 
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', padding=True)
-        self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=config.n_labels, return_dict=True).to(config.device)
+        model_name = 'cl-tohoku/bert-base-japanese-whole-word-masking' if config.lang == 'ja' else 'bert-base-uncased'
+        self.tokenizer = BertTokenizer.from_pretrained(model_name, padding=True)
+        self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=config.n_labels, return_dict=True).to(config.device)
         self.optimizer = AdamW(self.model.parameters(), lr=1e-5)
 
         data_train= EmotionDataset(self.config, 'train')
@@ -134,6 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=64, help='size of batch')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
     parser.add_argument('--fp16', action='store_true', help='run model with float16')
+    parser.add_argument('--lang', default='ja', choices=['en', 'ja'])
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
