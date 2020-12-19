@@ -16,11 +16,6 @@ import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.xla_multiprocessing as xmp
 from torchvision import datasets, transforms, utils
 
-BATCH_SIZE = 32
-LEARNING_RATE = 0.01
-N_WORKERS = 4
-N_CORES = 8
-
 
 class Cnn(nn.Module):
     def __init__(self):
@@ -71,19 +66,19 @@ class Trainer():
 
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=self.config.batch_size,
             sampler=train_sampler,
             num_workers=self.config.n_workers,
             drop_last=True)
 
         test_loader = torch.utils.data.DataLoader(
             test_dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=self.config.batch_size,
             shuffle=False,
             num_workers=self.config.n_workers,
             drop_last=True)
 
-        lr = LEARNING_RATE * xm.xrt_world_size()
+        lr = self.config.lr * xm.xrt_world_size()
 
         device = xm.xla_device()
         model = WRAPPED_MODEL.to(device)
@@ -95,7 +90,7 @@ class Trainer():
 
         start_time = time.time()
 
-        def train_loop_fn(loader):
+        def train_loop_fn(loader, config):
             tracker = xm.RateTracker()
             model.train()
 
@@ -106,7 +101,7 @@ class Trainer():
                 loss.backward()
                 xm.optimizer_step(optimizer)
 
-                tracker.add(BATCH_SIZE)
+                tracker.add(config.batch_size)
                 if batch_index % 100 == 0:
                     elapsed_time = time.time() - start_time
                     print("[xla:{}]({}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}, AscTime: {}".format(
@@ -131,7 +126,7 @@ class Trainer():
 
         for epoch in range(1, args.epochs + 1):
             para_loader = pl.ParallelLoader(train_loader, [device])
-            train_loop_fn(para_loader.per_device_loader(device))
+            train_loop_fn(para_loader.per_device_loader(device), self.config)
             xm.master_print('Finished training epoch {}'.format(epoch))
 
             para_loader = pl.ParallelLoader(test_loader, [device])
