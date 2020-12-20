@@ -83,7 +83,7 @@ class Trainer():
         device = xm.xla_device()
         model = WRAPPED_MODEL.to(device)
         optimizer = optim.SGD(model.parameters(), lr=lr)
-        loss_fn = nn.NLLLoss()
+        loss_fn = nn.CrossEntropyLoss()
 
         # if args.model != None:
         #     model.load_state_dict(torch.load(args.model, map_location=device_name), strict=False)
