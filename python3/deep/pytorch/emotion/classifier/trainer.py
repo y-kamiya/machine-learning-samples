@@ -122,6 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--log_interval', type=int, default=1)
+    parser.add_argument('--eval_interval', type=int, default=1)
     parser.add_argument('--n_labels', type=int, default=6, help='number of classes to train')
     parser.add_argument('--dataroot', default='data', help='path to data directory')
     parser.add_argument('--dataset_name', default='default', help='dataset name')
@@ -145,4 +146,5 @@ if __name__ == '__main__':
 
     for epoch in range(args.epochs):
         trainer.train(epoch)
-        trainer.eval(epoch)
+        if epoch % args.eval_interval == 0:
+            trainer.eval(epoch)
