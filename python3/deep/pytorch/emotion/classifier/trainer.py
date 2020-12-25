@@ -148,3 +148,5 @@ if __name__ == '__main__':
         trainer.train(epoch)
         if epoch % args.eval_interval == 0:
             trainer.eval(epoch)
+
+    trainer.eval(epoch)
