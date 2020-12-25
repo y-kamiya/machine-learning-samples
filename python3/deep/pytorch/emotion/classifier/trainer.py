@@ -84,8 +84,9 @@ class Trainer:
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-            elapsed_time = time.time() - start_time
-            self.config.logger.info('train epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, outputs.loss, elapsed_time))
+            if i % self.config.log_interval == 0:
+                elapsed_time = time.time() - start_time
+                self.config.logger.info('train epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, outputs.loss, elapsed_time))
 
             self.writer.add_scalar('loss/train', outputs.loss, epoch, start_time)
 
@@ -120,6 +121,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--loglevel', default='DEBUG')
+    parser.add_argument('--log_interval', type=int, default=1)
     parser.add_argument('--n_labels', type=int, default=6, help='number of classes to train')
     parser.add_argument('--dataroot', default='data', help='path to data directory')
     parser.add_argument('--dataset_name', default='default', help='dataset name')
