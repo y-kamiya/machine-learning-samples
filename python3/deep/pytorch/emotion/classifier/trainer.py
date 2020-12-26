@@ -32,6 +32,7 @@ class EmotionDataset(Dataset):
         with io.open(filepath, encoding='utf-8') as f:
             reader = csv.reader(f, delimiter='\t')
             for text, label_name in reader:
+                print(text)
                 if label_name not in self.label_index_map:
                     self.config.logger.warn(f'{label_name} is invalid label name, skipped')
                     continue
@@ -130,6 +131,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
     parser.add_argument('--fp16', action='store_true', help='run model with float16')
     parser.add_argument('--lang', default='ja', choices=['en', 'ja'])
+    parser.add_argument('--eval_only', action='store_true')
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
@@ -143,6 +145,10 @@ if __name__ == '__main__':
     args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.dataset_name}_{str(uuid.uuid4())[:8]}'
 
     trainer = Trainer(args)
+
+    if args.eval_only:
+        trainer.eval(0)
+        sys.exit()
 
     for epoch in range(args.epochs):
         trainer.train(epoch)
