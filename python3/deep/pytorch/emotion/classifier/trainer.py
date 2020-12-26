@@ -32,7 +32,6 @@ class EmotionDataset(Dataset):
         with io.open(filepath, encoding='utf-8') as f:
             reader = csv.reader(f, delimiter='\t')
             for text, label_name in reader:
-                print(text)
                 if label_name not in self.label_index_map:
                     self.config.logger.warn(f'{label_name} is invalid label name, skipped')
                     continue
@@ -62,9 +61,16 @@ class Trainer:
         self.dataloader_eval = DataLoader(data_eval, batch_size=self.config.batch_size, shuffle=True)
 
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
+        self.best_accuracy = 0.0
 
         if config.fp16:
             self.model, self.optimizer = apex.amp.initialize(self.model, self.optimizer, 'O1')
+
+        self.load(self.config.model_path)
+
+        if self.config.freeze_base:
+            for param in self.model.base_model.parameters():
+                param.requires_grad = False
 
     def train(self, epoch):
         self.model.train()
@@ -91,6 +97,8 @@ class Trainer:
 
             self.writer.add_scalar('loss/train', outputs.loss, epoch, start_time)
 
+        self.save(self.config.model_path)
+
     @torch.no_grad()
     def eval(self, epoch):
         self.model.eval()
@@ -112,11 +120,38 @@ class Trainer:
         elapsed_time = time.time() - start_time
         n_all = len(self.dataloader_eval.dataset)
         accuracy = n_correct / n_all
-        self.config.logger.info('eval epoch: {}, accuracy: {:.3f} ({}/{}), time: {:.2f}'.format(epoch, accuracy, n_correct, n_all, elapsed_time))
+        average_loss = sum(losses)/len(losses)
+        self.config.logger.info('eval epoch: {}, loss: {:.2f}, accuracy: {:.3f} ({}/{}), time: {:.2f}'.format(epoch, average_loss, accuracy, n_correct, n_all, elapsed_time))
 
         if not self.config.eval_only:
-            self.writer.add_scalar('loss/eval', sum(losses)/len(losses), epoch, start_time)
+            self.writer.add_scalar('loss/eval', average_loss, epoch, start_time)
             self.writer.add_scalar('loss/acc', accuracy, epoch, start_time)
+
+            if self.best_accuracy < accuracy:
+                self.best_accuracy = accuracy
+                self.save(self.config.best_model_path)
+
+    def save(self, model_path):
+        data = {
+            'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'amp': apex.amp.state_dict() if self.config.fp16 else None,
+            'batch_size': self.config.batch_size,
+            'fp16': self.config.fp16,
+        }
+        torch.save(data, model_path)
+        self.config.logger.info(f'save model to {model_path}')
+
+    def load(self, model_path):
+        if not os.path.isfile(model_path):
+            return
+
+        data = torch.load(model_path, map_location=self.config.device_name)
+        self.model.load_state_dict(data['model'])
+        self.optimizer.load_state_dict(data['optimizer'])
+        if self.config.fp16:
+            apex.amp.load_state_dict(data['amp'])
+        self.config.logger.info(f'load model from {model_path}')
 
 
 if __name__ == '__main__':
@@ -132,6 +167,8 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help='run model with float16')
     parser.add_argument('--lang', default='ja', choices=['en', 'ja'])
     parser.add_argument('--eval_only', action='store_true')
+    parser.add_argument('--name', default=None)
+    parser.add_argument('--freeze_base', action='store_true')
     args = parser.parse_args()
 
     is_cpu = args.cpu or not torch.cuda.is_available()
@@ -142,7 +179,13 @@ if __name__ == '__main__':
     logger.info(args)
     args.logger = logger
 
-    args.tensorboard_log_dir = f'{args.dataroot}/runs/{str(uuid.uuid4())[:8]}'
+    if args.name is None:
+        args.name = str(uuid.uuid4())[:8]
+
+    args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.name}'
+
+    args.model_path = f'{args.dataroot}/{args.name}.pth'
+    args.best_model_path = f'{args.dataroot}/{args.name}.best.pth'
 
     trainer = Trainer(args)
 
