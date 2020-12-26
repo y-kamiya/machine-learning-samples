@@ -26,7 +26,7 @@ class EmotionDataset(Dataset):
     def __init__(self, config, phase):
         self.config = config
 
-        filepath = os.path.join(config.dataroot, config.dataset_name, f'{phase}.txt')
+        filepath = os.path.join(config.dataroot, f'{phase}.txt')
         self.texts = []
         self.labels = []
         with io.open(filepath, encoding='utf-8') as f:
@@ -114,8 +114,9 @@ class Trainer:
         accuracy = n_correct / n_all
         self.config.logger.info('eval epoch: {}, accuracy: {:.3f} ({}/{}), time: {:.2f}'.format(epoch, accuracy, n_correct, n_all, elapsed_time))
 
-        self.writer.add_scalar('loss/eval', sum(losses)/len(losses), epoch, start_time)
-        self.writer.add_scalar('loss/acc', accuracy, epoch, start_time)
+        if not self.config.eval_only:
+            self.writer.add_scalar('loss/eval', sum(losses)/len(losses), epoch, start_time)
+            self.writer.add_scalar('loss/acc', accuracy, epoch, start_time)
 
 
 if __name__ == '__main__':
@@ -126,7 +127,6 @@ if __name__ == '__main__':
     parser.add_argument('--eval_interval', type=int, default=1)
     parser.add_argument('--n_labels', type=int, default=6, help='number of classes to train')
     parser.add_argument('--dataroot', default='data', help='path to data directory')
-    parser.add_argument('--dataset_name', default='default', help='dataset name')
     parser.add_argument('--batch_size', type=int, default=64, help='size of batch')
     parser.add_argument('--epochs', type=int, default=10, help='epoch count')
     parser.add_argument('--fp16', action='store_true', help='run model with float16')
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     logger.info(args)
     args.logger = logger
 
-    args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.dataset_name}_{str(uuid.uuid4())[:8]}'
+    args.tensorboard_log_dir = f'{args.dataroot}/runs/{str(uuid.uuid4())[:8]}'
 
     trainer = Trainer(args)
 
