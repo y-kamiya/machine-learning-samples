@@ -55,7 +55,7 @@ class Trainer:
         model_name = 'cl-tohoku/bert-base-japanese-whole-word-masking' if config.lang == 'ja' else 'bert-base-uncased'
         self.tokenizer = BertTokenizer.from_pretrained(model_name, padding=True)
         self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=config.n_labels, return_dict=True).to(config.device)
-        self.optimizer = AdamW(self.model.parameters(), lr=1e-5)
+        self.optimizer = AdamW(self.model.parameters(), lr=config.lr)
 
         data_train= EmotionDataset(self.config, 'train')
         self.dataloader_train = DataLoader(data_train, batch_size=self.config.batch_size, shuffle=True)
@@ -183,6 +183,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_only', action='store_true')
     parser.add_argument('--name', default=None)
     parser.add_argument('--freeze_base', action='store_true')
+    parser.add_argument('--lr', type=float, default=1e-5)
     args = parser.parse_args()
 
     pd.options.display.precision = 3
