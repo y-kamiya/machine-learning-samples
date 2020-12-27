@@ -13,9 +13,13 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertTokenizer, BertForSequenceClassification, AdamW
 from logzero import setup_logger
-from sklearn.metrics import classification_report
-from pycm import ConfusionMatrix
+from sklearn import metrics
+# from pycm import ConfusionMatrix
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+
 
 class EmotionDataset(Dataset):
     label_index_map = {
@@ -127,14 +131,10 @@ class Trainer:
         average_loss = sum(losses)/len(losses)
         self.config.logger.info('eval epoch: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, average_loss, elapsed_time))
 
-        
-        cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
-        label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
-        cm.relabel(mapping=label_map)
-        cm.print_normalized_matrix()
+        self.__log_confusion_matrix(all_preds, all_labels)
 
         columns = EmotionDataset.label_index_map.keys()
-        df = pd.DataFrame(classification_report(all_labels, all_preds, output_dict=True))
+        df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
         print(df)
 
         if not self.config.eval_only:
@@ -145,6 +145,25 @@ class Trainer:
             if self.best_f1_score < f1_score:
                 self.best_f1_score = f1_score
                 self.save(self.config.best_model_path)
+
+    def __log_confusion_matrix(self, all_preds, all_labels):
+        label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
+        cm = metrics.confusion_matrix(y_pred=all_preds.numpy(), y_true=all_labels.numpy())
+        display = metrics.ConfusionMatrixDisplay(cm, display_labels=label_map.values())
+        display.plot(cmap=plt.cm.Blues)
+        
+        buf = io.BytesIO()
+        display.figure_.savefig(buf, format="png", dpi=180)
+        buf.seek(0)
+        img_arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
+        buf.close()
+        img = cv2.imdecode(img_arr, 1)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        self.writer.add_image('confusion_maatrix', img, epoch, dataformats='HWC')
+        
+        # cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
+        # cm.relabel(mapping=label_map)
+        # cm.print_normalized_matrix()
 
     def save(self, model_path):
         data = {
