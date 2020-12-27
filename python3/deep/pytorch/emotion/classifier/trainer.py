@@ -13,6 +13,9 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertTokenizer, BertForSequenceClassification, AdamW
 from logzero import setup_logger
+from sklearn.metrics import classification_report
+from pycm import ConfusionMatrix
+import pandas as pd
 
 class EmotionDataset(Dataset):
     label_index_map = {
@@ -61,7 +64,7 @@ class Trainer:
         self.dataloader_eval = DataLoader(data_eval, batch_size=self.config.batch_size, shuffle=True)
 
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
-        self.best_accuracy = 0.0
+        self.best_f1_score = 0.0
 
         if config.fp16:
             self.model, self.optimizer = apex.amp.initialize(self.model, self.optimizer, 'O1')
@@ -103,7 +106,8 @@ class Trainer:
     def eval(self, epoch):
         self.model.eval()
 
-        n_correct = 0
+        all_labels = torch.empty(0)
+        all_preds = torch.empty(0)
         losses = []
         start_time = time.time()
 
@@ -114,21 +118,31 @@ class Trainer:
             outputs = self.model(**inputs, labels=labels)
 
             preds = torch.argmax(outputs.logits, dim=1)
-            n_correct += (preds == labels).sum().cpu().item()
             losses.append(outputs.loss)
 
+            all_labels = torch.cat([all_labels, labels.cpu()])
+            all_preds = torch.cat([all_preds, preds.cpu()])
+
         elapsed_time = time.time() - start_time
-        n_all = len(self.dataloader_eval.dataset)
-        accuracy = n_correct / n_all
         average_loss = sum(losses)/len(losses)
-        self.config.logger.info('eval epoch: {}, loss: {:.2f}, accuracy: {:.3f} ({}/{}), time: {:.2f}'.format(epoch, average_loss, accuracy, n_correct, n_all, elapsed_time))
+        self.config.logger.info('eval epoch: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, average_loss, elapsed_time))
+
+        cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
+        label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
+        cm.relabel(mapping=label_map)
+        cm.print_normalized_matrix()
+
+        columns = EmotionDataset.label_index_map.keys()
+        df = pd.DataFrame(classification_report(all_labels, all_preds, output_dict=True))
+        print(df)
 
         if not self.config.eval_only:
+            f1_score = df.loc['f1-score', 'macro avg']
             self.writer.add_scalar('loss/eval', average_loss, epoch, start_time)
-            self.writer.add_scalar('loss/acc', accuracy, epoch, start_time)
+            self.writer.add_scalar('loss/acc', f1_score, epoch, start_time)
 
-            if self.best_accuracy < accuracy:
-                self.best_accuracy = accuracy
+            if self.best_f1_score < f1_score:
+                self.best_f1_score = f1_score
                 self.save(self.config.best_model_path)
 
     def save(self, model_path):
@@ -170,6 +184,8 @@ if __name__ == '__main__':
     parser.add_argument('--name', default=None)
     parser.add_argument('--freeze_base', action='store_true')
     args = parser.parse_args()
+
+    pd.options.display.precision = 3
 
     is_cpu = args.cpu or not torch.cuda.is_available()
     args.device_name = "cpu" if is_cpu else "cuda:0"
