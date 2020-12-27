@@ -19,6 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import IPython.display
 
 
 class EmotionDataset(Dataset):
@@ -131,11 +132,11 @@ class Trainer:
         average_loss = sum(losses)/len(losses)
         self.config.logger.info('eval epoch: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, average_loss, elapsed_time))
 
-        self.__log_confusion_matrix(all_preds, all_labels)
+        self.__log_confusion_matrix(all_preds, all_labels, epoch)
 
         columns = EmotionDataset.label_index_map.keys()
         df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
-        print(df)
+        IPython.display.display(df)
 
         if not self.config.eval_only:
             f1_score = df.loc['f1-score', 'macro avg']
@@ -146,7 +147,7 @@ class Trainer:
                 self.best_f1_score = f1_score
                 self.save(self.config.best_model_path)
 
-    def __log_confusion_matrix(self, all_preds, all_labels):
+    def __log_confusion_matrix(self, all_preds, all_labels, epoch):
         label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
         cm = metrics.confusion_matrix(y_pred=all_preds.numpy(), y_true=all_labels.numpy())
         display = metrics.ConfusionMatrixDisplay(cm, display_labels=label_map.values())
@@ -157,8 +158,11 @@ class Trainer:
         buf.seek(0)
         img_arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
         buf.close()
+
         img = cv2.imdecode(img_arr, 1)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        IPython.display.display_png(IPython.display.Image(img_arr))
         self.writer.add_image('confusion_maatrix', img, epoch, dataformats='HWC')
         
         # cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
