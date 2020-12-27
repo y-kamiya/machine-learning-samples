@@ -127,6 +127,7 @@ class Trainer:
         average_loss = sum(losses)/len(losses)
         self.config.logger.info('eval epoch: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, average_loss, elapsed_time))
 
+        
         cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
         label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
         cm.relabel(mapping=label_map)
@@ -187,6 +188,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     pd.options.display.precision = 3
+    pd.options.display.max_rows = 10
+    pd.options.display.max_columns = 10
 
     is_cpu = args.cpu or not torch.cuda.is_available()
     args.device_name = "cpu" if is_cpu else "cuda:0"
