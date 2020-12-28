@@ -14,12 +14,12 @@ from torch.utils.tensorboard import SummaryWriter
 from transformers import BertTokenizer, BertForSequenceClassification, AdamW
 from logzero import setup_logger
 from sklearn import metrics
-# from pycm import ConfusionMatrix
+import pycm
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-import IPython.display
+from tabulate import tabulate
 
 
 class EmotionDataset(Dataset):
@@ -136,7 +136,7 @@ class Trainer:
 
         columns = EmotionDataset.label_index_map.keys()
         df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
-        IPython.display.display(df)
+        print(tabulate(df, headers='keys', tablefmt="github", floatfmt='.2f'))
 
         if not self.config.eval_only:
             f1_score = df.loc['f1-score', 'macro avg']
@@ -149,7 +149,7 @@ class Trainer:
 
     def __log_confusion_matrix(self, all_preds, all_labels, epoch):
         label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
-        cm = metrics.confusion_matrix(y_pred=all_preds.numpy(), y_true=all_labels.numpy())
+        cm = metrics.confusion_matrix(y_pred=all_preds.numpy(), y_true=all_labels.numpy(), normalize='true')
         display = metrics.ConfusionMatrixDisplay(cm, display_labels=label_map.values())
         display.plot(cmap=plt.cm.Blues)
         
@@ -162,12 +162,11 @@ class Trainer:
         img = cv2.imdecode(img_arr, 1)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        IPython.display.display_png(IPython.display.Image(img_arr))
         self.writer.add_image('confusion_maatrix', img, epoch, dataformats='HWC')
         
-        # cm = ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
-        # cm.relabel(mapping=label_map)
-        # cm.print_normalized_matrix()
+        cm = pycm.ConfusionMatrix(actual_vector=all_labels.numpy(), predict_vector=all_preds.numpy())
+        cm.relabel(mapping=label_map)
+        cm.print_normalized_matrix()
 
     def save(self, model_path):
         data = {
@@ -211,8 +210,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     pd.options.display.precision = 3
-    pd.options.display.max_rows = 10
-    pd.options.display.max_columns = 10
+    pd.options.display.max_columns = 30
 
     is_cpu = args.cpu or not torch.cuda.is_available()
     args.device_name = "cpu" if is_cpu else "cuda:0"
