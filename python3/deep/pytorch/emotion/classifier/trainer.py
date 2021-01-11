@@ -141,7 +141,7 @@ class Trainer:
         if not self.config.eval_only:
             f1_score = df.loc['f1-score', 'macro avg']
             self.writer.add_scalar('loss/eval', average_loss, epoch, start_time)
-            self.writer.add_scalar('loss/acc', f1_score, epoch, start_time)
+            self.writer.add_scalar('loss/f1_score', f1_score, epoch, start_time)
 
             if self.best_f1_score < f1_score:
                 self.best_f1_score = f1_score
