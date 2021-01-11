@@ -24,3 +24,12 @@ if [ $src_name == 'text_emotion.csv' ]; then
     exit
 fi
 
+src_dir_name=$(basename $(dirname $src_path))
+if [ $src_dir_name == 'semeval2018' ]; then
+    cat $src_path \
+    | tail -n +2 \
+    | sed -e 's///g' -e 's/"//g' \
+    | sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g' -e "s/&quot;/'/g" \
+
+    exit
+fi
