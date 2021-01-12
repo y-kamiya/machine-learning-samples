@@ -39,12 +39,17 @@ class EmotionDataset(Dataset):
         self.labels = []
         with io.open(filepath, encoding='utf-8') as f:
             reader = csv.reader(f, delimiter='\t')
-            for text, label_name in reader:
-                if label_name not in self.label_index_map:
+            for row in reader:
+                text = row[0]
+                label_name = 'none' if len(row) == 1 else row[1]
+                if label_name not in self.label_index_map and phase != 'predict':
                     self.config.logger.warn(f'{label_name} is invalid label name, skipped')
                     continue
+
                 self.texts.append(text)
-                self.labels.append(self.label_index_map[label_name])
+
+                label = -1 if label_name == 'none' else self.label_index_map[label_name]
+                self.labels.append(label)
 
     def __getitem__(self, index):
         return self.texts[index], self.labels[index]
@@ -62,11 +67,12 @@ class Trainer:
         self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=config.n_labels, return_dict=True).to(config.device)
         self.optimizer = AdamW(self.model.parameters(), lr=config.lr)
 
-        data_train= EmotionDataset(self.config, 'train')
-        self.dataloader_train = DataLoader(data_train, batch_size=self.config.batch_size, shuffle=True)
+        if not self.config.predict:
+            data_train= EmotionDataset(self.config, 'train')
+            self.dataloader_train = DataLoader(data_train, batch_size=self.config.batch_size, shuffle=True)
 
-        data_eval= EmotionDataset(self.config, 'eval')
-        self.dataloader_eval = DataLoader(data_eval, batch_size=self.config.batch_size, shuffle=True)
+            data_eval= EmotionDataset(self.config, 'eval')
+            self.dataloader_eval = DataLoader(data_eval, batch_size=self.config.batch_size, shuffle=False)
 
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
         self.best_f1_score = 0.0
@@ -147,6 +153,28 @@ class Trainer:
                 self.best_f1_score = f1_score
                 self.save(self.config.best_model_path)
 
+    @torch.no_grad()
+    def predict(self):
+        label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
+        label_map[-1] = 'none'
+        np.set_printoptions(precision=0)
+
+        dataset = EmotionDataset(self.config, 'predict')
+        loader = DataLoader(dataset, batch_size=self.config.batch_size)
+
+        output_path = os.path.join(self.config.dataroot, 'predict_result')
+        with open(output_path, 'w') as f:
+            for i, (texts, labels) in enumerate(loader):
+                inputs = self.tokenizer(texts, return_tensors='pt', padding=True).to(self.config.device)
+                outputs = self.model(**inputs)
+                preds = torch.argmax(outputs.logits, dim=1)
+                probs = F.softmax(outputs.logits, dim=1) * 100
+                for j in range(len(texts)):
+                    pred_label_name = label_map[preds[j].item()]
+                    true_label_name = label_map[labels[j].item()]
+                    prob = probs[j].cpu().numpy()
+                    f.write(f'{pred_label_name}\t{prob}\t{true_label_name}\t{texts[j]}\n')
+
     def __log_confusion_matrix(self, all_preds, all_labels, epoch):
         label_map = {value: key for key, value in EmotionDataset.label_index_map.items()}
         cm = metrics.confusion_matrix(y_pred=all_preds.numpy(), y_true=all_labels.numpy(), normalize='true')
@@ -204,6 +232,7 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help='run model with float16')
     parser.add_argument('--lang', default='ja', choices=['en', 'ja'])
     parser.add_argument('--eval_only', action='store_true')
+    parser.add_argument('--predict', action='store_true')
     parser.add_argument('--name', default=None)
     parser.add_argument('--freeze_base', action='store_true')
     parser.add_argument('--lr', type=float, default=1e-5)
@@ -232,6 +261,10 @@ if __name__ == '__main__':
 
     if args.eval_only:
         trainer.eval(0)
+        sys.exit()
+
+    if args.predict:
+        trainer.predict()
         sys.exit()
 
     for epoch in range(args.epochs):
