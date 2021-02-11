@@ -9,6 +9,11 @@ import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import torch.optim as optim
+import torch_xla
+import torch_xla.core.xla_model as xm
+import torch_xla.debug.metrics as met
+import torch_xla.distributed.parallel_loader as pl
+import torch_xla.distributed.xla_multiprocessing as xmp
 import PIL
 import pandas as pd
 from torch import nn
@@ -135,30 +140,55 @@ class Trainer:
     def __init__(self, config):
         self.config = config
 
-        self.model = Model(config)
-        self.eval_trainer = LinearEvaluationTrainer(config, self.model)
-
-        lr = 0.075 * math.sqrt(config.batch_size)
+        lr = 0.075 * math.sqrt(config.batch_size) * xm.xrt_world_size()
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, weight_decay=1e-6)
 
-        self.dataloader_train = DataLoader(SimCLRDataset(config, 'train'), batch_size=config.batch_size, shuffle=True)
+        self.device = xm.xla_device()
+        model = WRAPPED_MODEL.to(self.device)
+
+        train_dataset = SERIAL_EXECUTOR.run(SimCLRDataset(config, 'train'))
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+            train_dataset,
+            num_replicas=xm.xrt_world_size(),
+            rank=xm.get_ordinal(),
+            shuffle=True)
+
+        self.dataloader_train = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.config.batch_size,
+            sampler=train_sampler,
+            num_workers=self.config.n_workers,
+            drop_last=True)
 
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
+        self.start_time = time.time()
 
-    def train(self, epoch):
+    def train(self):
+        for epoch in range(1, args.epochs + 1):
+            para_loader = pl.ParallelLoader(self.dataloader_train, [self.device])
+            self.train_loop_fn(para_loader.per_device_loader(self.device), epoch)
+
+            xm.master_print('Finished training epoch {}'.format(epoch))
+            if self.config.metrics_debug:
+                xm.master_print(met.metrics_report(), flush=True)
+
+    def train_loop_fn(self, loader, epoch):
         self.model.train()
+        tracker = xm.RateTracker()
 
-        for i, (x_odd, x_even) in enumerate(self.dataloader_train):
+        for i, (x_odd, x_even) in enumerate(loader):
             start_time = time.time()
             self.optimizer.zero_grad()
             loss = self.__loss(x_odd, x_even)
             loss.backward()
+            xm.optimizer_step(self.optimizer)
 
-            self.optimizer.step()
-
+            tracker.add(self.config.batch_size)
             if i % self.config.log_interval == 0:
                 elapsed_time = time.time() - start_time
-                self.config.logger.info('train epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, loss, elapsed_time))
+                self.config.logger.info("[xla:{}](train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}, AscTime: {}".format(
+                    xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
+                    tracker.rate(), tracker.global_rate(), time.asctime()), flush=True)
 
             self.writer.add_scalar('train/loss', loss, epoch, start_time)
 
@@ -177,43 +207,73 @@ class Trainer:
     def __similarity(self, x1, x2):
         return F.cosine_similarity(x1, x2)
 
-    def eval(self, epoch):
-        for epoch in range(args.eval_epochs):
-            self.eval_trainer.train(epoch)
-
-        self.eval_trainer.eval(epoch)
-
 
 class LinearEvaluationTrainer():
-    def __init__(self, config, base_model):
+    def __init__(self, config):
         self.config = config
 
-        self.base_model = base_model
-        self.head = LinearEvaluationHead(config)
+        self.device = xm.xla_device()
+        self.base_model = WRAPPED_MODEL.to(self.device)
+        self.head = WRAPPED_MODEL_EVAL_HEAD.to(self.device)
 
-        lr = 0.1 * config.batch_size / 256
+        lr = 0.1 * config.batch_size / 256 * xm.xrt_world_size()
         self.optimizer = optim.AdamW(self.head.parameters(), lr=lr)
         # self.optimizer = optim.LBFGS(self.head.parameters(), lr=lr)
 
-        self.dataloader_train = DataLoader(LinearEvaluationDataset(config, 'train'),
-                                           batch_size=config.eval_batch_size, shuffle=True)
-        self.dataloader_eval = DataLoader(LinearEvaluationDataset(config, 'test'),
-                                          batch_size=config.eval_batch_size, shuffle=False)
+        train_dataset, eval_dataset = SERIAL_EXECUTOR.run(
+            LinearEvaluationDataset(config, 'train'),
+            LinearEvaluationDataset(config, 'test'))
 
-    def train(self, epoch):
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+            train_dataset,
+            num_replicas=xm.xrt_world_size(),
+            rank=xm.get_ordinal(),
+            shuffle=True)
+
+        self.dataloader_train = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.config.eval_batch_size,
+            sampler=train_sampler,
+            num_workers=self.config.n_workers,
+            drop_last=True)
+
+        self.dataloader_eval = torch.utils.data.DataLoader(
+            eval_dataset,
+            batch_size=self.config.eval_batch_size,
+            shuffle=False,
+            num_workers=self.config.n_workers,
+            drop_last=True)
+
+        self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
+        self.start_time = time.time()
+
+    def train(self):
+        for epoch in range(1, args.eval_epochs + 1):
+            para_loader = pl.ParallelLoader(self.dataloader_train, [self.device])
+            self.train_loop_fn(para_loader.per_device_loader(self.device), epoch)
+
+            xm.master_print('Finished training epoch {}'.format(epoch))
+            if self.config.metrics_debug:
+                xm.master_print(met.metrics_report(), flush=True)
+
+    def train_loop_fn(self, loader, epoch):
+        tracker = xm.RateTracker()
         self.base_model.train()
         self.head.train()
 
-        for i, (data, labels) in enumerate(self.dataloader_train):
-            start_time = time.time()
+        for i, (data, labels) in enumerate(loader):
             self.optimizer.zero_grad()
             loss, _ = self.__loss(data, labels)
             loss.backward()
-            self.optimizer.step()
+            xm.optimizer_step(self.optimizer)
 
+            tracker.add(self.config.batch_size)
             if i % self.config.log_interval == 0:
-                elapsed_time = time.time() - start_time
-                self.config.logger.info('eval epoch: {}, step: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, i, loss, elapsed_time))
+                elapsed_time = time.time() - self.start_time
+                template = "[xla:{}](eval train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}, AscTime: {}"
+                self.config.logger.info(template.format(
+                    xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
+                    tracker.rate(), tracker.global_rate(), time.asctime()), flush=True)
 
     def __loss(self, data, labels):
         with torch.no_grad():
@@ -224,7 +284,12 @@ class LinearEvaluationTrainer():
         return F.cross_entropy(output, labels), output
 
     @torch.no_grad()
-    def eval(self, epoch):
+    def eval(self):
+        para_loader = pl.ParallelLoader(self.dataloader_eval, [self.device])
+        self.eval_loop_fn(para_loader.per_device_loader(self.device))
+
+    @torch.no_grad()
+    def eval_loop_fn(self, loader):
         self.base_model.eval()
         self.head.eval()
 
@@ -243,22 +308,28 @@ class LinearEvaluationTrainer():
 
         elapsed_time = time.time() - start_time
         average_loss = sum(losses)/len(losses)
-        self.config.logger.info('eval epoch: {}, loss: {:.2f}, time: {:.2f}'.format(epoch, average_loss, elapsed_time))
+        self.config.logger.info('[xla:{}] loss: {:.2f}%, time: {:.2f}'.format(
+            xm.get_ordinal(), average_loss, elapsed_time), flush=True)
 
         df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
         print(tabulate(df, headers='keys', tablefmt="github", floatfmt='.2f'))
 
-        # f1_score = df.loc['f1-score']
-        # micro = f1_score['micro avg'] if 'micro avg' in f1_score else f1_score['accuracy']
-        # macro = f1_score['macro avg']
-        # self.writer.add_scalar('eval/loss', average_loss, epoch, start_time)
-        # self.writer.add_scalar('eval/f1_score_micro(accuracy)', micro, epoch, start_time)
-        # self.writer.add_scalar('eval/f1_score_macro', macro, epoch, start_time)
+
+def mp_train_fn(rank, config):
+    torch.set_default_tensor_type('torch.FloatTensor')
+    trainer = Trainer(config)
+    trainer.train()
+
+
+def mp_eval_fn(rank, config):
+    torch.set_default_tensor_type('torch.FloatTensor')
+    trainer = LinearEvaluationTrainer(config)
+    trainer.train()
+    trainer.eval()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
-    parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--log_interval', type=int, default=1)
     parser.add_argument('--eval_interval', type=int, default=1)
@@ -272,11 +343,10 @@ if __name__ == '__main__':
     parser.add_argument('--n_classes_eval', type=int, default=10, help='dimension of evaluation output')
     parser.add_argument('--projection_hidden_dim', type=int, default=2048, help='dimension of projection hidden layer')
     parser.add_argument('--projection_output_dim', type=int, default=128, help='dimension of projection output (z)')
+    parser.add_argument('--n_workers', type=int, default=4)
+    parser.add_argument('--n_cores', type=int, default=8)
+    parser.add_argument('--metrics_debug', action='store_true')
     args = parser.parse_args()
-
-    is_cpu = args.cpu or not torch.cuda.is_available()
-    args.device_name = "cpu" if is_cpu else "cuda:0"
-    args.device = torch.device(args.device_name)
 
     logger = setup_logger(name=__name__, level=args.loglevel)
     logger.info(args)
@@ -287,11 +357,14 @@ if __name__ == '__main__':
 
     args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.name}'
 
-    trainer = Trainer(args)
+    SERIAL_EXECUTOR = xmp.MpSerialExecutor()
+    WRAPPED_MODEL = xmp.MpModelWrapper(Model(args))
+    WRAPPED_MODEL_EVAL_HEAD = xmp.MpModelWrapper(LinearEvaluationHead(args))
 
-    for epoch in range(args.epochs):
-        trainer.train(epoch)
-        if epoch % args.eval_interval == 0:
-            trainer.eval(epoch)
+    xmp.spawn(mp_train_fn, args=(args,), nprocs=args.n_cores, start_method='fork')
 
-    trainer.eval(epoch)
+    for param in WRAPPED_MODEL.parameters():
+        param.requires_grad = False
+
+    xmp.spawn(mp_eval_fn, args=(args,), nprocs=args.n_cores, start_method='fork')
+
