@@ -140,13 +140,13 @@ class Trainer:
     def __init__(self, config):
         self.config = config
 
+        self.device = xm.xla_device()
+        self.model = WRAPPED_MODEL.to(self.device)
+
         lr = 0.075 * math.sqrt(config.batch_size) * xm.xrt_world_size()
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, weight_decay=1e-6)
 
-        self.device = xm.xla_device()
-        model = WRAPPED_MODEL.to(self.device)
-
-        train_dataset = SERIAL_EXECUTOR.run(SimCLRDataset(config, 'train'))
+        train_dataset = SERIAL_EXECUTOR.run(lambda: SimCLRDataset(config, 'train'))
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset,
             num_replicas=xm.xrt_world_size(),
@@ -177,7 +177,6 @@ class Trainer:
         tracker = xm.RateTracker()
 
         for i, (x_odd, x_even) in enumerate(loader):
-            start_time = time.time()
             self.optimizer.zero_grad()
             loss = self.__loss(x_odd, x_even)
             loss.backward()
@@ -185,12 +184,12 @@ class Trainer:
 
             tracker.add(self.config.batch_size)
             if i % self.config.log_interval == 0:
-                elapsed_time = time.time() - start_time
-                self.config.logger.info("[xla:{}](train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}, AscTime: {}".format(
+                elapsed_time = time.time() - self.start_time
+                self.config.logger.info("[xla:{}](train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}".format(
                     xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
-                    tracker.rate(), tracker.global_rate(), time.asctime()), flush=True)
+                    tracker.rate(), tracker.global_rate()))
 
-            self.writer.add_scalar('train/loss', loss, epoch, start_time)
+            self.writer.add_scalar('train/loss', loss, epoch, time.time())
 
     def __loss(self, x_odd, x_even):
         z_odd, h_odd = self.model(x_odd)
@@ -220,7 +219,7 @@ class LinearEvaluationTrainer():
         self.optimizer = optim.AdamW(self.head.parameters(), lr=lr)
         # self.optimizer = optim.LBFGS(self.head.parameters(), lr=lr)
 
-        train_dataset, eval_dataset = SERIAL_EXECUTOR.run(
+        train_dataset, eval_dataset = SERIAL_EXECUTOR.run(lambda: 
             LinearEvaluationDataset(config, 'train'),
             LinearEvaluationDataset(config, 'test'))
 
@@ -270,10 +269,10 @@ class LinearEvaluationTrainer():
             tracker.add(self.config.batch_size)
             if i % self.config.log_interval == 0:
                 elapsed_time = time.time() - self.start_time
-                template = "[xla:{}](eval train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}, AscTime: {}"
+                template = "[xla:{}](eval train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}"
                 self.config.logger.info(template.format(
                     xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
-                    tracker.rate(), tracker.global_rate(), time.asctime()), flush=True)
+                    tracker.rate(), tracker.global_rate()))
 
     def __loss(self, data, labels):
         with torch.no_grad():
@@ -296,7 +295,6 @@ class LinearEvaluationTrainer():
         all_labels = torch.empty(0)
         all_preds = torch.empty(0)
         losses = []
-        start_time = time.time()
 
         for i, (data, labels) in enumerate(self.dataloader_eval):
             loss, logits = self.__loss(data, labels)
@@ -306,10 +304,10 @@ class LinearEvaluationTrainer():
             all_labels = torch.cat([all_labels, labels.cpu()])
             all_preds = torch.cat([all_preds, preds.cpu()])
 
-        elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - self.start_time
         average_loss = sum(losses)/len(losses)
         self.config.logger.info('[xla:{}] loss: {:.2f}%, time: {:.2f}'.format(
-            xm.get_ordinal(), average_loss, elapsed_time), flush=True)
+            xm.get_ordinal(), average_loss, elapsed_time))
 
         df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
         print(tabulate(df, headers='keys', tablefmt="github", floatfmt='.2f'))
@@ -346,6 +344,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_workers', type=int, default=4)
     parser.add_argument('--n_cores', type=int, default=8)
     parser.add_argument('--metrics_debug', action='store_true')
+    parser.add_argument('--eval', default=None, choices=['linear'])
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
@@ -359,9 +358,12 @@ if __name__ == '__main__':
 
     SERIAL_EXECUTOR = xmp.MpSerialExecutor()
     WRAPPED_MODEL = xmp.MpModelWrapper(Model(args))
-    WRAPPED_MODEL_EVAL_HEAD = xmp.MpModelWrapper(LinearEvaluationHead(args))
 
-    xmp.spawn(mp_train_fn, args=(args,), nprocs=args.n_cores, start_method='fork')
+    if args.eval is None:
+        xmp.spawn(mp_train_fn, args=(args,), nprocs=args.n_cores, start_method='fork')
+        sys.exit()
+
+    WRAPPED_MODEL_EVAL_HEAD = xmp.MpModelWrapper(LinearEvaluationHead(args))
 
     for param in WRAPPED_MODEL.parameters():
         param.requires_grad = False
