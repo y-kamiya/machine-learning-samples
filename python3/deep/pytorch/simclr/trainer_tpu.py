@@ -165,7 +165,7 @@ class Trainer:
 
     def train(self):
         for epoch in range(1, args.epochs + 1):
-            para_loader = pl.ParallelLoader(self.dataloader_train, [self.device])
+            para_loader = pl.ParallelLoader(self.dataloader_train, [self.device], loader_prefetch_size=2, device_prefetch_size=2)
             self.train_loop_fn(para_loader.per_device_loader(self.device), epoch)
 
             xm.master_print('Finished training epoch {}'.format(epoch))
