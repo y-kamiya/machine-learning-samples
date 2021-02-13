@@ -14,6 +14,7 @@ import torch_xla.core.xla_model as xm
 import torch_xla.debug.metrics as met
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.utils.serialization as xser
 import PIL
 import pandas as pd
 from torch import nn
@@ -163,10 +164,15 @@ class Trainer:
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
         self.start_time = time.time()
 
+        self.start_epoch = self.load(config.model_path)
+
     def train(self):
-        for epoch in range(1, args.epochs + 1):
+        for epoch in range(self.start_epoch, args.epochs + 1):
             para_loader = pl.ParallelLoader(self.dataloader_train, [self.device], loader_prefetch_size=2, device_prefetch_size=2)
             self.train_loop_fn(para_loader.per_device_loader(self.device), epoch)
+
+            if epoch % self.config.save_interval == 0:
+                self.save(self.config.model_path, epoch)
 
             xm.master_print('Finished training epoch {}'.format(epoch))
             if self.config.metrics_debug:
@@ -205,6 +211,28 @@ class Trainer:
 
     def __similarity(self, x1, x2):
         return F.cosine_similarity(x1, x2)
+
+    def save(self, model_path, epoch):
+        data = {
+            'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': epoch,
+        }
+        xser.save(data, model_path)
+
+        self.config.logger.info(f'save model to {model_path}')
+
+    def load(self, model_path):
+        if not os.path.isfile(model_path):
+            return 1
+
+        data = xser.load(model_path)
+        self.model.load_state_dict(data['model'])
+        self.optimizer.load_state_dict(data['optimizer'])
+
+        self.config.logger.info(f'load model from {model_path}')
+
+        return data['epoch'] + 1
 
 
 class LinearEvaluationTrainer():
@@ -330,7 +358,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--loglevel', default='DEBUG')
     parser.add_argument('--log_interval', type=int, default=1)
-    parser.add_argument('--eval_interval', type=int, default=1)
+    parser.add_argument('--save_interval', type=int, default=1)
     parser.add_argument('--dataroot', default='data', help='path to data directory')
     parser.add_argument('--name', default=None)
     parser.add_argument('--epochs', type=int, default=100, help='epochs for simclr training')
@@ -355,6 +383,7 @@ if __name__ == '__main__':
         args.name = str(uuid.uuid4())[:8]
 
     args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.name}'
+    args.model_path = f'{args.dataroot}/{args.name}.pth'
 
     SERIAL_EXECUTOR = xmp.MpSerialExecutor()
     WRAPPED_MODEL = xmp.MpModelWrapper(Model(args))
