@@ -147,6 +147,12 @@ class Trainer:
         lr = 0.075 * math.sqrt(config.batch_size) * xm.xrt_world_size()
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, weight_decay=1e-6)
 
+        self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, config.epochs - config.warmup_epochs)
+
+        self.warmup_scheduler = optim.lr_scheduler.LambdaLR(
+            self.optimizer, lr_lambda=lambda epoch: min(1.0, (epoch + 1) / config.warmup_epochs))
+
         train_dataset = SERIAL_EXECUTOR.run(lambda: SimCLRDataset(config, 'train'))
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset,
@@ -174,6 +180,11 @@ class Trainer:
             if epoch % self.config.save_interval == 0:
                 self.save(self.config.model_path, epoch)
 
+            if self.config.warmup_epochs < epoch:
+                self.lr_scheduler.step()
+            else:
+                self.warmup_scheduler.step()
+
             xm.master_print('Finished training epoch {}'.format(epoch))
             if self.config.metrics_debug:
                 xm.master_print(met.metrics_report(), flush=True)
@@ -191,8 +202,8 @@ class Trainer:
             tracker.add(self.config.batch_size)
             if i % self.config.log_interval == 0:
                 elapsed_time = time.time() - self.start_time
-                self.config.logger.info("[xla:{}](train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, Rate: {:.2f}, GlobalRate: {:.2f}".format(
-                    xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
+                self.config.logger.info("[xla:{}](train epoch: {}, step: {}) Elapsed: {:0.2f} sec, Loss: {:0.3f}, LR: {:.2e} {:.2e}, Rate: {:.2f}, GlobalRate: {:.2f}".format(
+                    xm.get_ordinal(), epoch, i, elapsed_time, loss.item(), self.warmup_scheduler.get_last_lr()[0], self.lr_scheduler.get_last_lr()[0],
                     tracker.rate(), tracker.global_rate()))
 
             self.writer.add_scalar('train/loss', loss, epoch, time.time())
@@ -363,6 +374,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', default=None)
     parser.add_argument('--epochs', type=int, default=100, help='epochs for simclr training')
     parser.add_argument('--eval_epochs', type=int, default=90, help='epoch count')
+    parser.add_argument('--warmup_epochs', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=64, help='size of batch for simclr training')
     parser.add_argument('--eval_batch_size', type=int, default=64, help='size of batch for eval')
     parser.add_argument('--n_classes_encoder', type=int, default=2048, help='dimension of encoder output (h)')
