@@ -177,9 +177,9 @@ class Trainer:
     def train_loop_fn(self, loader, epoch):
         self.model.train()
 
-        for i, (x_odd, x_even) in enumerate(loader):
+        for i, (x1, x2) in enumerate(loader):
             self.optimizer.zero_grad()
-            loss = self.__loss(x_odd, x_even)
+            loss = self.__loss(x1, x2)
             loss.backward()
             self.optimizer.step()
 
@@ -190,20 +190,29 @@ class Trainer:
 
             self.writer.add_scalar('train/loss', loss, epoch, time.time())
 
-    def __loss(self, x_odd, x_even):
-        z_odd, h_odd = self.model(x_odd)
-        z_even, h_even = self.model(x_even)
+    def __loss(self, x1, x2):
+        batch_size = x1.shape[0]
 
-        z_odd_slided = torch.cat([z_odd[1:], z_odd[0].unsqueeze(0)])
+        x = torch.cat([x1, x2])
+        z, _ = self.model(x)
+        z1, z2 = torch.split(F.normalize(z, p=2), batch_size)
 
-        s_positive = self.__similarity(z_odd, z_even)
-        s_negative = self.__similarity(z_odd_slided, z_even)
+        labels = torch.eye(batch_size, batch_size * 2, device=self.config.device)
+        masks = torch.eye(batch_size, device=self.config.device)
 
-        batch_size = len(s_negative)
-        return (s_positive + s_negative).sum() / (2 * batch_size)
+        temperature = self.config.temperature
+        logits_aa = torch.matmul(z1, z1.T) / temperature
+        logits_aa = logits_aa - masks * 1e9
+        logits_bb = torch.matmul(z2, z2.T) / temperature
+        logits_bb = logits_bb - masks * 1e9
+        logits_ab = torch.matmul(z1, z2.T) / temperature
+        logits_ba = torch.matmul(z2, z1.T) / temperature
 
-    def __similarity(self, x1, x2):
-        return F.cosine_similarity(x1, x2)
+        target = torch.argmax(labels, dim=1)
+        loss_a = F.cross_entropy(torch.cat([logits_ab, logits_aa], dim=1), target, reduction='none')
+        loss_b = F.cross_entropy(torch.cat([logits_ba, logits_bb], dim=1), target, reduction='none')
+
+        return torch.mean(loss_a + loss_b)
 
     def save(self, model_path, epoch):
         data = {
@@ -337,6 +346,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_classes_eval', type=int, default=10, help='dimension of evaluation output')
     parser.add_argument('--projection_hidden_dim', type=int, default=2048, help='dimension of projection hidden layer')
     parser.add_argument('--projection_output_dim', type=int, default=128, help='dimension of projection output (z)')
+    parser.add_argument('--temperature', type=float, default=0.1, help='temperature parameter of loss function')
     parser.add_argument('--n_workers', type=int, default=4)
     parser.add_argument('--n_cores', type=int, default=8)
     parser.add_argument('--metrics_debug', action='store_true')
