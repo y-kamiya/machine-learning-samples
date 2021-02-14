@@ -229,7 +229,7 @@ class Trainer:
             'optimizer': self.optimizer.state_dict(),
             'epoch': epoch,
         }
-        xser.save(data, model_path)
+        xm.save(data, model_path)
 
         self.config.logger.info(f'save model to {model_path}')
 
@@ -237,7 +237,7 @@ class Trainer:
         if not os.path.isfile(model_path):
             return 1
 
-        data = xser.load(model_path)
+        data = torch.load(model_path)
         self.model.load_state_dict(data['model'])
         self.optimizer.load_state_dict(data['optimizer'])
 
