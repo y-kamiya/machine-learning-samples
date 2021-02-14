@@ -182,6 +182,8 @@ class Trainer:
         self.model.train()
 
         for i, (x1, x2) in enumerate(loader):
+            x1 = x1.to(self.config.device)
+            x2 = x2.to(self.config.device)
             self.optimizer.zero_grad()
             loss = self.__loss(x1, x2)
 
