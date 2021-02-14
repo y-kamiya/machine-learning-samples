@@ -22,8 +22,8 @@ from tabulate import tabulate
 
 
 class SimCLRDataset(Dataset):
-    IMAGE_SIZE = 32
-    BLUR_KERNEL_SIZE = 3
+    IMAGE_SIZE = 224
+    BLUR_KERNEL_SIZE = 21
 
     def __init__(self, config, split):
         super(SimCLRDataset, self).__init__()
@@ -32,7 +32,7 @@ class SimCLRDataset(Dataset):
         self.transform = self.__transform()
         # train = True if split == 'train' else False
         # self.data = datasets.CIFAR10(config.dataroot, train=train, download=True)
-        self.data = datasets.FakeData(size=40, image_size=(3, self.IMAGE_SIZE, self.IMAGE_SIZE))
+        self.data = datasets.FakeData(size=1000, image_size=(3, self.IMAGE_SIZE, self.IMAGE_SIZE))
 
     def __transform(self):
         list = [
