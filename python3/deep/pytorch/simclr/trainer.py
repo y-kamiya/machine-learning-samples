@@ -30,9 +30,9 @@ class SimCLRDataset(Dataset):
         self.config = config
 
         self.transform = self.__transform()
-        # train = True if split == 'train' else False
-        # self.data = datasets.CIFAR10(config.dataroot, train=train, download=True)
-        self.data = datasets.FakeData(size=1000, image_size=(3, self.IMAGE_SIZE, self.IMAGE_SIZE))
+        train = True if split == 'train' else False
+        self.data = datasets.CIFAR10(config.dataroot, train=train, download=True)
+        # self.data = datasets.FakeData(size=1000, image_size=(3, self.IMAGE_SIZE, self.IMAGE_SIZE))
 
     def __transform(self):
         list = [
