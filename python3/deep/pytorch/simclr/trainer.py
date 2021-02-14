@@ -11,6 +11,7 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 import PIL
 import pandas as pd
+import apex
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -142,6 +143,9 @@ class Trainer:
         lr = 0.075 * math.sqrt(config.batch_size)
         self.optimizer = optim.SGD(self.model.parameters(), lr=lr, weight_decay=1e-6)
 
+        if config.fp16:
+            self.model, self.optimizer = apex.amp.initialize(self.model, self.optimizer, 'O1')
+
         self.lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, config.epochs - config.warmup_epochs)
 
@@ -180,7 +184,13 @@ class Trainer:
         for i, (x1, x2) in enumerate(loader):
             self.optimizer.zero_grad()
             loss = self.__loss(x1, x2)
-            loss.backward()
+
+            if self.config.fp16:
+                with apex.amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
+
             self.optimizer.step()
 
             if i % self.config.log_interval == 0:
@@ -218,6 +228,7 @@ class Trainer:
         data = {
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
+            'amp': apex.amp.state_dict() if self.config.fp16 else None,
             'epoch': epoch,
         }
         torch.save(data, model_path)
@@ -231,6 +242,8 @@ class Trainer:
         data = torch.load(model_path)
         self.model.load_state_dict(data['model'])
         self.optimizer.load_state_dict(data['optimizer'])
+        if self.config.fp16:
+            apex.amp.load_state_dict(data['amp'])
 
         self.config.logger.info(f'load model from {model_path}')
 
@@ -351,6 +364,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_cores', type=int, default=8)
     parser.add_argument('--metrics_debug', action='store_true')
     parser.add_argument('--eval', default=None, choices=['linear'])
+    parser.add_argument('--fp16', action='store_true', help='run model with float16')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
