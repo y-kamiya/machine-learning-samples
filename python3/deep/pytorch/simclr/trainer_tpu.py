@@ -214,6 +214,9 @@ class Trainer:
         x = torch.cat([x1, x2])
         z, _ = self.model(x)
         z1, z2 = torch.split(F.normalize(z, p=2), batch_size)
+        print(batch_size)
+        print(z1)
+        print(z1.T)
 
         labels = torch.eye(batch_size, batch_size * 2, device=self.device)
         masks = torch.eye(batch_size, device=self.device)
@@ -225,10 +228,13 @@ class Trainer:
         logits_bb = logits_bb - masks * 1e9
         logits_ab = torch.matmul(z1, z2.T) / temperature
         logits_ba = torch.matmul(z2, z1.T) / temperature
+        print(logits_aa)
 
         target = torch.argmax(labels, dim=1)
+        print(target)
         loss_a = F.cross_entropy(torch.cat([logits_ab, logits_aa], dim=1), target, reduction='none')
         loss_b = F.cross_entropy(torch.cat([logits_ba, logits_bb], dim=1), target, reduction='none')
+        print(loss_a, loss_b)
 
         return torch.mean(loss_a + loss_b)
 
