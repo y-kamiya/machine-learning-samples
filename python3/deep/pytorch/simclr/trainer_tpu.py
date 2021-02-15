@@ -27,25 +27,34 @@ from tabulate import tabulate
 
 
 class SimCLRDataset(Dataset):
-    IMAGE_SIZE = 224
-    BLUR_KERNEL_SIZE = 21
-
     def __init__(self, config, split):
         super(SimCLRDataset, self).__init__()
         self.config = config
+
+        self.image_size = 224
+        self.blur_kernel_size = 21
+        if config.pretrain_with_cifar10:
+            self.image_size = 32
+            self.blur_kernel_size = 0
 
         self.transform = self.__transform()
         train = True if split == 'train' else False
         self.data = datasets.CIFAR10(config.dataroot, train=train, download=True)
 
     def __transform(self):
+        s = 0.5 if self.config.pretrain_with_cifar10 else 1.0
+
         list = [
-            transforms.RandomResizedCrop(self.IMAGE_SIZE),
+            transforms.RandomResizedCrop(self.image_size),
             transforms.RandomHorizontalFlip(),
-            self.__transform_color_distortion(),
-            transforms.GaussianBlur(self.BLUR_KERNEL_SIZE),
-            transforms.ToTensor(),
+            self.__transform_color_distortion(s),
         ]
+
+        if not self.config.pretrain_with_cifar10:
+            list.append(transforms.GaussianBlur(self.blur_kernel_size))
+
+        list.append(transforms.ToTensor())
+
         return transforms.Compose(list)
 
     def __transform_color_distortion(self, s=1.0):
@@ -73,14 +82,16 @@ class LinearEvaluationDataset(Dataset):
         super(LinearEvaluationDataset, self).__init__()
         self.config = config
 
+        self.image_size = 224
+
         train = True if split == 'train' else False
         self.data = datasets.CIFAR10(config.dataroot, train=train, download=True,
                                      transform=self.__transform())
 
     def __transform(self):
         list = [
-            transforms.Resize(SimCLRDataset.IMAGE_SIZE, PIL.Image.BICUBIC),
-            transforms.CenterCrop(SimCLRDataset.IMAGE_SIZE),
+            transforms.Resize(self.image_size, PIL.Image.BICUBIC),
+            transforms.CenterCrop(self.image_size),
             transforms.ToTensor(),
         ]
         return transforms.Compose(list)
@@ -117,6 +128,9 @@ class Model(nn.Module):
         self.config = config
 
         self.encoder = torchvision.models.resnet50(num_classes=config.n_classes_encoder)
+        if config.pretrain_with_cifar10:
+            self.encoder.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
+            self.encoder.maxpool = nn.Identity()
         self.projection_head = ProjectionHead(config)
 
     def forward(self, x):
@@ -395,6 +409,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_cores', type=int, default=8)
     parser.add_argument('--metrics_debug', action='store_true')
     parser.add_argument('--eval', default=None, choices=['linear'])
+    parser.add_argument('--pretrain_with_cifar10', action='store_true')
     args = parser.parse_args()
 
     logger = setup_logger(name=__name__, level=args.loglevel)
@@ -406,6 +421,9 @@ if __name__ == '__main__':
 
     args.tensorboard_log_dir = f'{args.dataroot}/runs/{args.name}'
     args.model_path = f'{args.dataroot}/{args.name}.pth'
+
+    if args.pretrain_with_cifar10:
+        args.temperature = 0.5
 
     SERIAL_EXECUTOR = xmp.MpSerialExecutor()
     WRAPPED_MODEL = xmp.MpModelWrapper(Model(args))
