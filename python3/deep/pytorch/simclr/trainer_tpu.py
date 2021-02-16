@@ -277,13 +277,15 @@ class LinearEvaluationTrainer():
         self.base_model = WRAPPED_MODEL.to(self.device)
         self.head = WRAPPED_MODEL_EVAL_HEAD.to(self.device)
 
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+
         lr = 0.1 * config.batch_size / 256 * xm.xrt_world_size()
-        self.optimizer = optim.AdamW(self.head.parameters(), lr=lr)
+        self.optimizer = optim.SGD(self.head.parameters(), lr=lr, weight_decay=0.1)
         # self.optimizer = optim.LBFGS(self.head.parameters(), lr=lr)
 
         train_dataset, eval_dataset = SERIAL_EXECUTOR.run(lambda: 
-            LinearEvaluationDataset(config, 'train'),
-            LinearEvaluationDataset(config, 'test'))
+            (LinearEvaluationDataset(config, 'train'), LinearEvaluationDataset(config, 'test')))
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset,
@@ -308,8 +310,12 @@ class LinearEvaluationTrainer():
         self.writer = SummaryWriter(log_dir=config.tensorboard_log_dir)
         self.start_time = time.time()
 
+        self.start_epoch = 1
+        if config.base_model_path is not None:
+            self.start_epoch = self.load(config.base_model_path)
+
     def train(self):
-        for epoch in range(1, args.eval_epochs + 1):
+        for epoch in range(self.start_epoch, args.eval_epochs + 1):
             para_loader = pl.ParallelLoader(self.dataloader_train, [self.device])
             self.train_loop_fn(para_loader.per_device_loader(self.device), epoch)
 
@@ -319,7 +325,7 @@ class LinearEvaluationTrainer():
 
     def train_loop_fn(self, loader, epoch):
         tracker = xm.RateTracker()
-        self.base_model.train()
+        self.base_model.eval()
         self.head.train()
 
         for i, (data, labels) in enumerate(loader):
@@ -374,6 +380,28 @@ class LinearEvaluationTrainer():
         df = pd.DataFrame(metrics.classification_report(all_labels, all_preds, output_dict=True))
         print(tabulate(df, headers='keys', tablefmt="github", floatfmt='.2f'))
 
+    def save(self, model_path, epoch):
+        data = {
+            'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': epoch,
+        }
+        xm.save(data, model_path)
+
+        self.config.logger.info(f'save model to {model_path}')
+
+    def load(self, model_path):
+        if not os.path.isfile(model_path):
+            return 1
+
+        data = torch.load(model_path)
+        self.model.load_state_dict(data['model'])
+        self.optimizer.load_state_dict(data['optimizer'])
+
+        self.config.logger.info(f'load model from {model_path}')
+
+        return data['epoch'] + 1
+
 
 def mp_train_fn(rank, config):
     torch.set_default_tensor_type('torch.FloatTensor')
@@ -409,6 +437,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_cores', type=int, default=8)
     parser.add_argument('--metrics_debug', action='store_true')
     parser.add_argument('--eval', default=None, choices=['linear'])
+    parser.add_argument('--base_model_path', default=None)
     parser.add_argument('--pretrain_with_cifar10', action='store_true')
     args = parser.parse_args()
 
@@ -433,9 +462,6 @@ if __name__ == '__main__':
         sys.exit()
 
     WRAPPED_MODEL_EVAL_HEAD = xmp.MpModelWrapper(LinearEvaluationHead(args))
-
-    for param in WRAPPED_MODEL.parameters():
-        param.requires_grad = False
 
     xmp.spawn(mp_eval_fn, args=(args,), nprocs=args.n_cores, start_method='fork')
 
