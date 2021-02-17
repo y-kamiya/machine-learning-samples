@@ -83,6 +83,10 @@ class LinearEvaluationDataset(Dataset):
         self.config = config
 
         self.image_size = 224
+        self.blur_kernel_size = 21
+        if config.pretrain_with_cifar10:
+            self.image_size = 32
+            self.blur_kernel_size = 0
 
         train = True if split == 'train' else False
         self.data = datasets.CIFAR10(config.dataroot, train=train, download=True,
@@ -342,6 +346,8 @@ class LinearEvaluationTrainer():
                     xm.get_ordinal(), epoch, i, elapsed_time, loss.item(),
                     tracker.rate(), tracker.global_rate()))
 
+            self.writer.add_scalar('eval_train/loss', loss, epoch, time.time())
+
     def __loss(self, data, labels):
         with torch.no_grad():
             _, h = self.base_model(data)
@@ -364,7 +370,7 @@ class LinearEvaluationTrainer():
         all_preds = torch.empty(0)
         losses = []
 
-        for i, (data, labels) in enumerate(self.dataloader_eval):
+        for i, (data, labels) in enumerate(loader):
             loss, logits = self.__loss(data, labels)
             losses.append(loss)
             preds = torch.argmax(logits, dim=1)
@@ -384,7 +390,7 @@ class LinearEvaluationTrainer():
         data = {
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
-            'epoch': epoch,
+            'eval_epoch': epoch,
         }
         xm.save(data, model_path)
 
@@ -394,13 +400,16 @@ class LinearEvaluationTrainer():
         if not os.path.isfile(model_path):
             return 1
 
-        data = torch.load(model_path)
-        self.model.load_state_dict(data['model'])
-        self.optimizer.load_state_dict(data['optimizer'])
-
         self.config.logger.info(f'load model from {model_path}')
 
-        return data['epoch'] + 1
+        data = torch.load(model_path)
+        self.base_model.load_state_dict(data['model'])
+        if 'eval_epoch' not in data:
+            return 1
+
+        self.optimizer.load_state_dict(data['optimizer'])
+
+        return data['eval_epoch'] + 1
 
 
 def mp_train_fn(rank, config):
