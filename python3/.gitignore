@@ -1,5 +1,9 @@
 ### https://raw.github.com/github/gitignore/7e854d39915457f55afe9886daeef4b2a35dc772/Python.gitignore
 
+data
+MNIST-data
+MNIST_data
+
 .python-version
 
 # Byte-compiled / optimized / DLL files
