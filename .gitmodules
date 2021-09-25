@@ -5,8 +5,8 @@
 	path = python3/reinforcement/retro-contest
 	url = https://github.com/openai/retro-contest.git
 [submodule "python3/deep/pytorch/emotion/classifier/apex"]
-	path = python3/deep/pytorch/emotion/classifier/apex
+	path = python3/dnn/pytorch/emotion/classifier/apex
 	url = https://github.com/NVIDIA/apex
 [submodule "python3/deep/pytorch/simclr/apex"]
-	path = python3/deep/pytorch/simclr/apex
+	path = python3/dnn/pytorch/simclr/apex
 	url = https://github.com/NVIDIA/apex.git
