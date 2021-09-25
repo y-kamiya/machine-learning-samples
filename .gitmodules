@@ -7,3 +7,6 @@
 [submodule "python3/deep/pytorch/emotion/classifier/apex"]
 	path = python3/deep/pytorch/emotion/classifier/apex
 	url = https://github.com/NVIDIA/apex
+[submodule "python3/deep/pytorch/simclr/apex"]
+	path = python3/deep/pytorch/simclr/apex
+	url = https://github.com/NVIDIA/apex.git
