@@ -1,15 +1,13 @@
 import sys
 from dataclasses import dataclass, field
+
 import MeCab
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from argparse_dataclass import ArgumentParser
 import tensorflow_hub as hub
-import numpy as np
-import tensorflow_text
+from argparse_dataclass import ArgumentParser
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
-class FeatureExtractorBase():
+class FeatureExtractorBase:
     def __init__(self, config):
         self.config = config
 
@@ -19,7 +17,9 @@ class FeatureExtractorTfidf(FeatureExtractorBase):
         super().__init__(config)
 
         self.tagger = MeCab.Tagger()
-        self.vectorizer = TfidfVectorizer(use_idf=True, min_df=0.02, stop_words=[],token_pattern=u'(?u)\\b\\w+\\b')
+        self.vectorizer = TfidfVectorizer(
+            use_idf=True, min_df=0.02, stop_words=[], token_pattern=u"(?u)\\b\\w+\\b"
+        )
 
     def parse(self, text: str) -> str:
         node = self.tagger.parseToNode(text)
@@ -44,9 +44,11 @@ class FeatureExtractorTfidf(FeatureExtractorBase):
 
 
 class FeatureExtractorUse(FeatureExtractorBase):
-    def __init___(self, config):
+    def __init__(self, config):
         super().__init__(config)
-        self.embed = hub.load("https://tfhub.dev/google/universal-sentence-encoder-multilingual/3")
+        self.embed = hub.load(
+            "https://tfhub.dev/google/universal-sentence-encoder-multilingual/3"
+        )
 
     def vectorize(self, datapath):
         with open(datapath, "r") as f:
@@ -56,7 +58,7 @@ class FeatureExtractorUse(FeatureExtractorBase):
 
 
 @dataclass
-class Config():
+class Config:
     datapath: str = field(default="data/test")
     type: str = field(default="use", metadata=dict(choices=["tfidf", "use"]))
 
@@ -78,5 +80,3 @@ if __name__ == "__main__":
         print(vectors)
         print(vectors.shape)
         sys.exit()
-        
-    
