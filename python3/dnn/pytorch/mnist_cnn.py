@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import apex
 from torchvision import datasets, transforms, utils
 
 BATCH_SIZE=32
@@ -41,6 +42,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', action='store_true', help='use cpu')
     parser.add_argument('--model', help='model to load')
     parser.add_argument('--estimate', help='image file path to estimate class')
+    parser.add_argument('--fp16', action='store_true', help='run model with float16')
     args = parser.parse_args()
     print(args)
 
@@ -49,9 +51,13 @@ if __name__ == '__main__':
     device = torch.device(device_name)
 
     model = Cnn().to(device)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
 
     if args.model != None:
         model.load_state_dict(torch.load(args.model, map_location=device_name), strict=False)
+
+    if args.fp16:
+        model, optimizer = apex.amp.initialize(model, optimizer, 'O1')
 
     transform = transform=transforms.Compose([
         transforms.Grayscale(),
@@ -75,8 +81,6 @@ if __name__ == '__main__':
             batch_size=BATCH_SIZE, shuffle=True)
 
 
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
-
     start = time.time()
     for i in range(args.epochs):
         model.train()
@@ -85,7 +89,13 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             output = model(data)
             loss = F.cross_entropy(output, target)
-            loss.backward()
+
+            if args.fp16:
+                with apex.amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
+
             optimizer.step()
             if batch_index % 100 == 0:
                 print("elapsed: {:0.2f} sec, step {}, loss {:0.3f}".format(time.time() - start, batch_index * len(data), loss.item()))
