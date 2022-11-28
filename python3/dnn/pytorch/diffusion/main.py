@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import os
 import sys
-import argparse
 import time
+
 import torch
 import torch.nn.functional as F
-from torch import optim, nn, utils, Tensor
+from logzero import setup_logger
+from torch import Tensor, nn, optim, utils
 from torch.utils import tensorboard
 from torchvision import datasets
 from torchvision.transforms import ToTensor
-from logzero import setup_logger
 
 
 class ToyDataset(utils.data.Dataset):
@@ -61,7 +62,9 @@ class Trainer(object):
         self.input_dim = input_dim
         self.model = Model(self.input_dim)
         self.model.apply(self._weights_init)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-8)
+        self.optimizer = optim.Adam(
+            self.model.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-8
+        )
 
         beta0 = 1e-4
         betaT = 2e-2
@@ -84,19 +87,19 @@ class Trainer(object):
 
     def _weights_init(self, m):
         classname = m.__class__.__name__
-        if classname.find('Conv') != -1:
+        if classname.find("Conv") != -1:
             nn.init.kaiming_normal_(m.weight)
             m.bias.data.fill_(0)
-        elif classname.find('Linear') != -1:
+        elif classname.find("Linear") != -1:
             nn.init.kaiming_normal_(m.weight)
             m.bias.data.fill_(0)
-        elif classname.find('BatchNorm') != -1:
+        elif classname.find("BatchNorm") != -1:
             m.weight.data.normal_(1.0, 0.02)
             m.bias.data.fill_(0)
 
     def train(self, dataloader, epoch: int):
         self.model.train()
-        self.logger.info(f'start training epoch {epoch}')
+        self.logger.info(f"start training epoch {epoch}")
         for x in dataloader:
             x = x.to(self.config.device)
             self.step(x)
@@ -124,7 +127,7 @@ class Trainer(object):
 
         if self.steps % self.config.log_interval == 0:
             logger.info(f"[train] step: {self.steps}, loss: {loss:.3f}")
-        self.writer.add_scalar('loss/train', loss, self.steps, time.time())
+        self.writer.add_scalar("loss/train", loss, self.steps, time.time())
 
     def step_end(self):
         self.steps += 1
@@ -146,10 +149,12 @@ class Trainer(object):
     def sample(self, n: int):
         # xt = torch.randn((n, self.input_dim))
         # ts = range(self.config.T - 1, 1, -1)
-        xt = torch.Tensor([
-            [-0.5000, -0.4000, -0.3000, -0.2000],
-            [0.2000, 0.3000, 0.4000, 0.5000],
-        ])
+        xt = torch.Tensor(
+            [
+                [-0.5000, -0.4000, -0.3000, -0.2000],
+                [0.2000, 0.3000, 0.4000, 0.5000],
+            ]
+        )
         xt = self.q_sample(xt, 0)
         ts = [0]
         for t in ts:
@@ -159,24 +164,38 @@ class Trainer(object):
 
         return xt
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=True)
-    parser.add_argument('--cpu', action='store_true', help='use cpu')
-    parser.add_argument('--dataroot', default='data', help='path to data')
-    parser.add_argument('--name', default='default', help='name of training, used to model name, log dir name etc')
-    parser.add_argument('--epochs', type=int, default=10, help='epoch count')
-    parser.add_argument('--batch_size', type=int, default=2, help='size of batch')
-    parser.add_argument('--log_interval', type=int, default=10, help='step num to display log')
-    parser.add_argument('--model_path', default=None, help='model path')
-    parser.add_argument('--eval_interval_epochs', type=int, default=5, help='evaluate by every this epochs ')
-    parser.add_argument('--T', type=int, default=20, help='time step of diffusion process')
+    parser.add_argument("--cpu", action="store_true", help="use cpu")
+    parser.add_argument("--dataroot", default="data", help="path to data")
+    parser.add_argument(
+        "--name",
+        default="default",
+        help="name of training, used to model name, log dir name etc",
+    )
+    parser.add_argument("--epochs", type=int, default=10, help="epoch count")
+    parser.add_argument("--batch_size", type=int, default=2, help="size of batch")
+    parser.add_argument(
+        "--log_interval", type=int, default=10, help="step num to display log"
+    )
+    parser.add_argument("--model_path", default=None, help="model path")
+    parser.add_argument(
+        "--eval_interval_epochs",
+        type=int,
+        default=5,
+        help="evaluate by every this epochs ",
+    )
+    parser.add_argument(
+        "--T", type=int, default=20, help="time step of diffusion process"
+    )
     config = parser.parse_args()
 
     is_cpu = config.cpu or not torch.cuda.is_available()
     config.device_name = "cpu" if is_cpu else "cuda:0"
     config.device = torch.device(config.device_name)
 
-    config.tensorboard_log_dir = f'{config.dataroot}/runs/{config.name}'
+    config.tensorboard_log_dir = f"{config.dataroot}/runs/{config.name}"
     os.makedirs(config.tensorboard_log_dir, exist_ok=True)
 
     logger = setup_logger(name=__name__)
@@ -186,7 +205,9 @@ if __name__ == '__main__':
 
     # dataset = datasets.MNIST(f"{config.dataroot}/train", download=True, transform=ToTensor())
     dataset = ToyDataset(input_dim, 2 * input_dim)
-    dataloader = utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+    dataloader = utils.data.DataLoader(
+        dataset, batch_size=config.batch_size, shuffle=True
+    )
 
     for epoch in range(config.epochs):
         trainer.train(dataloader, epoch)
