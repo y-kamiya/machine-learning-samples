@@ -27,7 +27,8 @@ class SEAN(nn.Module):
                 if "Spade.param_free_norm" in key:
                     data.pop(key)
                 else:
-                    data[key.replace("fc_mu", "per_style_convs.")] = data.pop(key)
+                    # data[key.replace("fc_mu", "per_style_convs.")] = data.pop(key)
+                    data[key.replace("fc_mu", "per_style_convs")] = data.pop(key)
             self.generator.load_state_dict(data)
 
     @torch.no_grad()
@@ -227,7 +228,8 @@ class ACE(nn.Module):
         self.param_free_norm = SynchronizedBatchNorm2d(fin, affine=False)
         self.Spade = SPADE(label_nc, fin)
         if apply_style:
-            self.per_style_convs = nn.ModuleList([nn.Linear(self.N_STYLES, self.N_STYLES) for _ in range(label_nc)])
+            # self.per_style_convs = nn.ModuleList([nn.Linear(self.N_STYLES, self.N_STYLES) for _ in range(label_nc)])
+            self.create_gamma_beta_fc_layers()
             self.conv_gamma = nn.Conv2d(self.N_STYLES, fin, kernel_size=3, padding=1)
             self.conv_beta = nn.Conv2d(self.N_STYLES, fin, kernel_size=3, padding=1)
 
@@ -249,7 +251,8 @@ class ACE(nn.Module):
                 mask = seg.bool()[i, j]
                 mask_count = torch.sum(mask)
                 if mask_count:
-                    mu = F.relu(self.per_style_convs[j](style_codes[i][j]))
+                    # mu = F.relu(self.per_style_convs[j](style_codes[i][j]))
+                    mu = F.relu(self.__getattr__('per_style_convs' + str(j))(style_codes[i][j]))
                     mu = mu.reshape(self.N_STYLES, 1).expand(self.N_STYLES, mask_count)
                     middle_avg[i].masked_scatter_(mask, mu)
 
@@ -267,6 +270,27 @@ class ACE(nn.Module):
         b, _, h, w = x.shape
         noise = torch.randn(b, w, h, 1).to(device=x.device)
         return (noise * self.noise_var).transpose(1, 3)
+
+    def create_gamma_beta_fc_layers(self):
+        self.per_style_convs0 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs1 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs2 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs3 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs4 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs5 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs6 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs7 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs8 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs9 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs10 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs11 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs12 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs13 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs14 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs15 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs16 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs17 = nn.Linear(self.N_STYLES, self.N_STYLES)
+        self.per_style_convs18 = nn.Linear(self.N_STYLES, self.N_STYLES)
 
 
 class SPADE(nn.Module):
