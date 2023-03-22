@@ -1,4 +1,6 @@
+import sys
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +8,7 @@ import torchvision.transforms as transforms
 import torch.nn.utils.spectral_norm as spectral_norm
 from torchvision.utils import save_image
 from PIL import Image
+from torchinfo import summary
 
 
 class SEAN(nn.Module):
@@ -29,6 +32,9 @@ class SEAN(nn.Module):
     def forward(self, image, label, style_codes):
         image = self.transform_image(image).unsqueeze(0)
         label = self.transform_label(label).unsqueeze(0)
+        summary(self.generator, input_data=[image, self.build_label(label), style_codes]) 
+        sys.exit()
+
         return self.generator(image, self.build_label(label), style_codes)
 
     @torch.no_grad()
@@ -89,7 +95,9 @@ class Generator(nn.Module):
         self.conv_img = nn.Conv2d(64, 3, kernel_size=3, padding=1)
 
     def forward(self, image, seg, style_codes):
+        print(image.shape, seg.shape)
         x = F.interpolate(seg, size=(self.dim, self.dim))
+        print(x.shape)
         x = self.fc(x)
 
         x = self.head_0(x, seg, style_codes)
@@ -110,6 +118,8 @@ class Generator(nn.Module):
         return x
 
     def encode(self, image, seg):
+        summary(self.Zencoder, input_data=[image, seg])
+        sys.exit()
         return self.Zencoder(image, seg)
 
 
@@ -291,6 +301,8 @@ if __name__ == "__main__":
     label = Image.open("label.png")
 
     style_codes = model.encode(image, label)
+    # torch.save(style_codes, "style_codes.pth")
+    # style_codes = torch.load("a.pth", map_location=args.device)
     print(style_codes.shape)
 
     image_backhair = Image.open("image_backhair.png")
