@@ -10,6 +10,8 @@ from torchvision.utils import save_image
 from PIL import Image
 from torchinfo import summary
 
+from batchnorm import SynchronizedBatchNorm2d
+
 
 class SEAN(nn.Module):
     def __init__(self, config):
@@ -222,7 +224,7 @@ class ACE(nn.Module):
         self.blending_beta = nn.Parameter(torch.zeros(1), requires_grad=True)
         self.noise_var = nn.Parameter(torch.zeros(fin), requires_grad=True)
 
-        self.param_free_norm = nn.BatchNorm2d(fin, affine=False)
+        self.param_free_norm = SynchronizedBatchNorm2d(fin, affine=False)
         self.Spade = SPADE(label_nc, fin)
         if apply_style:
             self.per_style_convs = nn.ModuleList([nn.Linear(self.N_STYLES, self.N_STYLES) for _ in range(label_nc)])
