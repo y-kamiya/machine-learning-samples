@@ -1,4 +1,3 @@
-import argparse
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,12 +6,22 @@ import torchvision.transforms as transforms
 import torch.nn.utils.spectral_norm as spectral_norm
 from torchvision.utils import save_image
 from PIL import Image
+from dataclasses import dataclass
+from argparse_dataclass import ArgumentParser
 
 from batchnorm import SynchronizedBatchNorm2d
 
 
+@dataclass
+class Config:
+    device_name: str = "cuda"
+    device: torch.device = torch.device("cuda")
+    label_nc: int = 19
+    model_path: str = "/tmp/models/latest_net_G.pth"
+
+
 class SEAN(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Config):
         super().__init__()
         self.config = config
         self.generator = Generator(config).to(config.device)
@@ -278,15 +287,10 @@ class SPADE(nn.Module):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(add_help=True)
-    parser.add_argument('--is_cpu', action="store_true")
-    parser.add_argument('--label_nc', type=int, default=19)
-    parser.add_argument('--model_path', default=None)
+    parser = ArgumentParser(Config)
     args = parser.parse_args()
-    print(args)
-    
-    args.device_name = "cpu" if args.is_cpu else "cuda"
     args.device = torch.device(args.device_name)
+    print(args)
 
     model = SEAN(args)
     model.eval()
