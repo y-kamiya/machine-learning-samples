@@ -58,6 +58,12 @@ class SEAN(nn.Module):
         label[label == 255] = 182
         return image, label
 
+    def postprocess(self, tensor):
+        image = tensor.detach().cpu().float().numpy()
+        image = (np.transpose(image, (1, 2, 0)) + 1) / 2.0 * 255.0
+        image = np.clip(image, 0, 255)
+        return Image.fromarray(image.astype(np.uint8))
+
     def build_transform(self, method=Image.BICUBIC, normalize=True):
         transform_list = [
             transforms.Lambda(lambda img: self.scale_width(img, 512, method)),
