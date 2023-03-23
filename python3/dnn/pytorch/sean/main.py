@@ -116,7 +116,7 @@ class Generator(nn.Module):
         x = self.up(x)
         x = self.up_3(x, seg, style_codes)
 
-        x = self.conv_img(x)
+        x = self.conv_img(F.leaky_relu(x, 2e-1))
         x = F.tanh(x)
         return x
 
