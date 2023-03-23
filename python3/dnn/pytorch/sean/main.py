@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,23 +30,24 @@ class SEAN(nn.Module):
 
     @torch.no_grad()
     def forward(self, image, label, style_codes):
-        image = self.transform_image(image).unsqueeze(0)
-        label = self.transform_label(label).unsqueeze(0)
         return self.generator(image, self.build_label(label), style_codes)
 
     @torch.no_grad()
     def encode(self, image, label):
-        image = self.transform_image(image).unsqueeze(0)
-        label = self.transform_label(label).unsqueeze(0)
         return self.generator.encode(image, self.build_label(label))
 
     def build_label(self, label):
         b, _, h, w = label.size()
-        label = label * 255.0
-        label[label == 255] = 182
         label = label.to(dtype=torch.int64)
         input_label = torch.zeros((b, self.config.label_nc, h, w)).to(device=self.config.device, dtype=torch.float)
         return input_label.scatter_(1, label, 1.0)
+
+    def preprocess(self, image_pil, label_pil):
+        image = self.transform_image(image_pil).unsqueeze(0).to(self.config.device)
+        label = self.transform_label(label_pil).unsqueeze(0).to(self.config.device)
+        label = label * 255.0
+        label[label == 255] = 182
+        return image, label
 
     def build_transform(self, method=Image.BICUBIC, normalize=True):
         transform_list = [
@@ -289,19 +291,18 @@ if __name__ == "__main__":
     model = SEAN(args)
     model.eval()
 
-    image = Image.open("image.png")
-    label = Image.open("label.png")
+    image_pil = Image.open("image.png")
+    label_pil = Image.open("label.png")
 
+    image, label = model.preprocess(image_pil, label_pil)
     style_codes = model.encode(image, label)
-    print(style_codes.shape)
 
-    image_backhair = Image.open("image_backhair.png")
-    label_backhair = Image.open("label_backhair.png")
+    image_backhair_pil = Image.open("image_backhair.png")
+    label_backhair_pil = Image.open("label_backhair.png")
 
-    seg = np.where(np.array(label_backhair) > 0, 7, label)
-    seg_image = Image.fromarray(np.uint8(seg))
+    seg = np.where(np.array(label_backhair_pil) > 0, 7, label_pil)
+    image_backhair, seg_image = model.preprocess(image_backhair_pil, Image.fromarray(np.uint8(seg)))
     output = model(image_backhair, seg_image, style_codes=style_codes)
-    print(output.shape)
     save_image(output[0], "test.png")
 
     image_np = output.squeeze(0).detach().cpu().float().numpy()
