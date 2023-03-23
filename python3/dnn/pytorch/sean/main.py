@@ -8,7 +8,6 @@ import torchvision.transforms as transforms
 import torch.nn.utils.spectral_norm as spectral_norm
 from torchvision.utils import save_image
 from PIL import Image
-from torchinfo import summary
 
 from batchnorm import SynchronizedBatchNorm2d
 
@@ -35,8 +34,6 @@ class SEAN(nn.Module):
     def forward(self, image, label, style_codes):
         image = self.transform_image(image).unsqueeze(0)
         label = self.transform_label(label).unsqueeze(0)
-        summary(self.generator, input_data=[image, self.build_label(label), style_codes]) 
-        sys.exit()
 
         return self.generator(image, self.build_label(label), style_codes)
 
@@ -121,8 +118,6 @@ class Generator(nn.Module):
         return x
 
     def encode(self, image, seg):
-        summary(self.Zencoder, input_data=[image, seg])
-        sys.exit()
         return self.Zencoder(image, seg)
 
 
