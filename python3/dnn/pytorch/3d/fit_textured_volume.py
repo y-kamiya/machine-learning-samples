@@ -31,10 +31,10 @@ from plot_image_grid import image_grid
 class Config():
     device: str = "cpu"
     dataroot: str = "data/mesh_tex"
-    n_steps: int = 3
-    plot_interval_steps: int = 1
+    n_steps: int = 300
+    plot_interval_steps: int = 50
     n_views: int = 40
-    n_views_train: int = 2
+    n_views_train: int = 10
     volume_size: int = 128
     volume_extent_world: float = 3.0
 
