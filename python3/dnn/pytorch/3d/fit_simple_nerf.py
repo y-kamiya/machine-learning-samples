@@ -42,34 +42,18 @@ class Config():
 
 
 class Dataset():
-    @classmethod
-    def _camera(cls, i, R, T, d):
-        return renderer.FoVPerspectiveCameras(device=d, R=R[None, i, ...], T=T[None, i, ...])
-
     def __init__(self, config: Config, mesh):
         self.config = config
 
         elev = torch.linspace(0, 360, config.n_views)
         azim = torch.linspace(-180, 180, config.n_views)
         R, T = renderer.look_at_view_transform(dist=2.7, elev=elev, azim=azim)
-        camera = self._camera(1, R, T, config.device)
 
         lights = renderer.PointLights(device=config.device, location=[[0.0, 0.0, -3.0]])
         raster_settings = renderer.RasterizationSettings(
             image_size=128,
             blur_radius=0.0,
             faces_per_pixel=1,
-        )
-        mesh_renderer = renderer.MeshRenderer(
-            rasterizer=renderer.MeshRasterizer(
-                cameras=camera,
-                raster_settings=raster_settings
-            ),
-            shader=renderer.SoftPhongShader(
-                device=config.device,
-                cameras=camera,
-                lights=lights
-            )
         )
 
         verts = mesh.verts_packed()
@@ -80,17 +64,38 @@ class Dataset():
 
         meshes = mesh.extend(config.n_views)
         cameras = renderer.FoVPerspectiveCameras(device=config.device, R=R, T=T)
+        mesh_renderer = renderer.MeshRenderer(
+            rasterizer=renderer.MeshRasterizer(
+                cameras=cameras,
+                raster_settings=raster_settings
+            ),
+            shader=renderer.SoftPhongShader(
+                device=config.device,
+                cameras=cameras,
+                lights=lights
+            )
+        )
         tgt_images = mesh_renderer(meshes, cameras=cameras, lights=lights)
 
         # image_grid(tgt_images.cpu().numpy(), rows=4, cols=5, rgb=True)
         # plt.show()
 
+        raster_settings_silhouette = renderer.RasterizationSettings(
+            image_size=128, blur_radius=np.log(1.0 / 1e-4 - 1.0) * 1e-4, faces_per_pixel=50
+        )
+        renderer_silhouette = renderer.MeshRenderer(
+            rasterizer=renderer.MeshRasterizer(
+                cameras=cameras, raster_settings=raster_settings_silhouette
+            ),
+            shader=renderer.SoftSilhouetteShader(),
+        )
+        silhouette_images = renderer_silhouette(meshes, cameras=cameras, lights=lights)
+
         self.R = R
         self.T = T
-        self.default_camera = camera
-        self.default_lights = lights
         self.tgt_mesh = mesh
         self.tgt_images = tgt_images
+        self.tgt_silhouettes = (silhouette_images[..., 3] > 1e-4).float()
         self.cameras = cameras
         self.center = center
         self.scale = scale
@@ -217,6 +222,7 @@ class Trainer():
 
         self.tgt_cameras = self.dataset.cameras.to(config.device)
         self.tgt_images = self.dataset.tgt_images.to(config.device)
+        self.tgt_silhouettes = self.dataset.tgt_silhouettes.to(config.device)
 
         self.huber_loss = torch.nn.HuberLoss(delta=0.1)
         self.nerf = NeuralRadianceField().to(config.device)
@@ -252,16 +258,19 @@ class Trainer():
             volumetric_function=self.nerf,
         )
 
-        target_at_rays = self.sample_images_at_mc_locs(
-            self.tgt_images[idxs],
+        rgb_at_rays = self.sample_images_at_mc_locs(
+            self.tgt_images[idxs, ..., :3],
             sampled_rays.xys,
         )
-
-        silhouette = self.huber_loss(pred_images[..., 3], target_at_rays[..., 3])
-        self.writer.add_scalar("loss/silhouette", silhouette, steps, time.time())
-
-        rgb = self.huber_loss(pred_images[..., :3], target_at_rays[..., :3])
+        rgb = self.huber_loss(pred_images[..., :3], rgb_at_rays)
         self.writer.add_scalar("loss/rgb", rgb, steps, time.time())
+
+        silhouette_at_rays = self.sample_images_at_mc_locs(
+            self.tgt_silhouettes[idxs, ..., None],
+            sampled_rays.xys,
+        )
+        silhouette = self.huber_loss(pred_images[..., 3].unsqueeze(-1), silhouette_at_rays)
+        self.writer.add_scalar("loss/silhouette", silhouette, steps, time.time())
 
         loss = silhouette + rgb
         self.writer.add_scalar("loss/all", loss, steps, time.time())
@@ -296,7 +305,7 @@ class Trainer():
         ax[0].imshow(self.clamp_and_detach(pred_images[0, ..., :3]))
         ax[1].imshow(self.clamp_and_detach(self.tgt_images[camera_idx, ..., :3]))
         ax[2].imshow(self.clamp_and_detach(pred_images[0, ..., 3]))
-        ax[3].imshow(self.clamp_and_detach(self.tgt_images[camera_idx, ..., 3]))
+        ax[3].imshow(self.clamp_and_detach(self.tgt_silhouettes[camera_idx, ...]))
         for ax_, title_ in zip(ax, ("pred rgb", "target rgb", "pred silhouette", "target silhouette")):
             ax_.grid("off")
             ax_.axis("off")
@@ -342,6 +351,7 @@ class Trainer():
 
 if __name__ == "__main__":
     config = Config()
+    torch.manual_seed(1)
 
     mesh = load_objs_as_meshes([f"{config.dataroot}/cow.obj"], device=config.device)
     dataset = Dataset(config, mesh)
