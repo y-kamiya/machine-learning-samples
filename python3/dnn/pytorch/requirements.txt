@@ -3,3 +3,5 @@ torchvision
 tensorboard
 logzero
 accelerate
+diffusers
+transformers
