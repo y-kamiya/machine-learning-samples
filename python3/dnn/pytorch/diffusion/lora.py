@@ -1,3 +1,4 @@
+import os
 import argparse
 from PIL import Image
 import torch
@@ -7,6 +8,8 @@ from diffusers import (
     UNet2DConditionModel,
     UniPCMultistepScheduler,
     StableDiffusionPipeline,
+    DDIMScheduler,
+    DPMSolverMultistepScheduler,
 )
 from tqdm.auto import tqdm
 
@@ -17,21 +20,37 @@ class DiffusersLora:
 
         pipe_kargs = {
             "use_safetensors": True,
+            "load_safety_checker": False,
             "torch_dtype": torch.bfloat16,
         }
         self.pipeline = StableDiffusionPipeline.from_single_file(
+        # self.pipeline = StableDiffusionPipeline.from_pretrained(
             self.config.model,
             **pipe_kargs,
         ).to(self.config.device)
 
+        self.pipeline.scheduler = DPMSolverMultistepScheduler.from_config(self.pipeline.scheduler.config)
+
+        if os.path.isfile(self.config.lora):
+            self.pipeline.load_lora_weights(self.config.lora)
+
+        if os.path.isfile(self.config.embeddings):
+            self.pipeline.load_textual_inversion(self.config.embeddings)
+
     def run(self):
-        image = self.pipeline(self.config.prompt, num_inference_steps=20)
+        image = self.pipeline(
+            self.config.prompt,
+            negative_prompt="easynegative",
+            num_inference_steps=20,
+        )
         image.images[0].save("lora.png")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=True)
-    parser.add_argument("--model", default="CompVis/stable-diffusion-v1-4")
+    parser.add_argument("--model", default="runwayml/stable-diffusion-v1-5")
+    parser.add_argument("--lora", default="")
+    parser.add_argument("--embeddings", default="")
     parser.add_argument("--cpu", action="store_true", help="use cpu")
     parser.add_argument("--batch_size", type=int, default=1, help="size of batch")
     parser.add_argument(
