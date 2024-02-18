@@ -11,34 +11,40 @@ class Pipeline:
         self.pipeline = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
         self.pipeline.to(self.config.device)
 
-    def text2img(self, prompt, negative_prompt, width, height, n_steps, guidance_scale):
+    def text2img(self, prompt, negative_prompt, width, height, batch_size, n_steps, guidance_scale):
         return self.pipeline(
             prompt=prompt,
             negative_prompt=negative_prompt,
             height=height,
             width=width,
+            num_images_per_prompt=batch_size,
             num_inference_steps=n_steps,
             guidance_scale=guidance_scale,
-        ).images[0]
+        ).images
 
 
 def main(config):
     pipeline = Pipeline(config)
 
-    app = gr.Interface(
+    demo = gr.Interface(
         fn=pipeline.text2img,
         inputs=[
             gr.TextArea(label="Prompt"),
             gr.TextArea(label="Negative Prompt"),
             gr.Number(label="Width", value=512),
             gr.Number(label="Height", value=512),
+            gr.Slider(minimum=1, maximum=8, value=4, step=1, label="Batch Size"),
             gr.Slider(minimum=1, maximum=50, value=20, step=1, label="Sampling Step"),
             gr.Slider(minimum=1, maximum=100, value=7.5, step=0.5, label="CFG"),
         ],
-        outputs=gr.Image(height=512, width=512),
+        outputs=gr.Gallery(),
+
+        examples=[
+            ["the link of the legend of zelda", ""],
+        ],
     )
 
-    app.launch()
+    demo.launch()
 
 
 if __name__ == "__main__":
