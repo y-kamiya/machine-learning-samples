@@ -5,3 +5,4 @@ logzero
 accelerate
 diffusers
 transformers
+gradio
