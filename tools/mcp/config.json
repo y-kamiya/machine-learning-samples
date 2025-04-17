@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "time": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp/time"]
+    },
+    "toy": {
+      "command": "uv",
+      "args": ["run", "mcp", "run", "toy/server.py"]
+    }
+  }
+}
