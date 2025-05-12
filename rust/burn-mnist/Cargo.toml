@@ -1,0 +1,10 @@
+[package]
+name = "burn-mnist"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["burn/dataset", "burn/vision", "burn/ndarray"]
+
+[dependencies]
+burn = { version = "0.17.0", features = ["train"] }
