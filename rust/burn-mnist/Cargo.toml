@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["burn/dataset", "burn/vision", "burn/ndarray"]
+default = ["burn/dataset", "burn/vision", "burn/tch"]
 
 [dependencies]
 burn = { version = "0.17.0", features = ["train"] }

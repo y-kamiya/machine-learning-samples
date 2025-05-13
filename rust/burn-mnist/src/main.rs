@@ -24,7 +24,8 @@ use burn::{
     },
     backend::{
         Autodiff,
-        ndarray::{NdArray, NdArrayDevice},
+        // ndarray::{NdArray, NdArrayDevice},
+        libtorch::{LibTorch, LibTorchDevice},
     },
 };
 
@@ -198,7 +199,10 @@ fn train<B: AutodiffBackend>(config: TrainConfig, device: B::Device) {
 }
 
 fn main() {
-    type B = Autodiff<NdArray>;
+    // type B = Autodiff<NdArray>;
+    // let device = NdArrayDevice::Cpu;
+    type B = Autodiff<LibTorch>;
+    let device = LibTorchDevice::Mps;
     let config = TrainConfig::new();
-    train::<B>(config, NdArrayDevice::Cpu);
+    train::<B>(config, device);
 }
