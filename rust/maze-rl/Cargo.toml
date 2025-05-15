@@ -1,0 +1,12 @@
+[package]
+name = "maze-rl"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["burn/tch"]
+
+[dependencies]
+burn = { version = "0.17.0", features = ["train"] }
+rand = "0.9.1"
+strum = { version = "0.27.1", features = ["derive"] }
