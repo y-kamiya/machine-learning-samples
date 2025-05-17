@@ -10,8 +10,14 @@ use burn::{
     prelude::*,
     tensor::backend::AutodiffBackend,
     nn::{
-        Linear, LinearConfig, Relu, Dropout, DropoutConfig, PaddingConfig2d,
-        loss::HuberLossConfig,
+        Linear, LinearConfig, Relu,
+        loss::{
+            HuberLoss, HuberLossConfig, Reduction,
+        }
+    },
+    optim::{
+        Adam, AdamConfig, GradientsParams, Optimizer,
+        adaptor::OptimizerAdaptor,
     },
     backend::{
         Autodiff,
@@ -128,38 +134,69 @@ impl ModelConfig{
     }
 }
 
-struct Agent<B: Backend> {
+struct Agent<B: AutodiffBackend> {
     model: Model<B>,
+    optim: OptimizerAdaptor<Adam, Model<B>, B>,
+    loss: HuberLoss,
     input_shape: (usize, usize),
     device: B::Device,
 }
 
+const ETA: f32 = 0.1;
+const GAMMA: f32 = 0.9;
+const EPSILON: f32 = 0.5;
+
 impl<B: AutodiffBackend> Agent<B> {
     fn new(input_shape: (usize, usize), output_dim: usize, device: &B::Device) -> Self {
+        let input_dim = input_shape.0 * input_shape.1;
         Self {
             model: ModelConfig::new(input_dim, output_dim).init(device),
+            optim: AdamConfig::new().init(),
+            loss: HuberLossConfig::new(1.0).init(),
             input_shape: input_shape,
             device: device.clone(),
         }
     }
-    fn decide(&self) -> Action {
-        let dist = WeightedIndex::new([0.25, 0.25, 0.25, 0.25]).unwrap();
-        Action::sample(dist)
+    fn decide(&self, state: Pos) -> Action {
+        if rand::random::<f32>() < EPSILON {
+            println!("Random action");
+            let dist = WeightedIndex::new([0.25, 0.25, 0.25, 0.25]).unwrap();
+            return Action::sample(dist);
+        }
+
+        let output = self.predict(state);
+        let idx: u8 = output.argmax(0).into_scalar().elem();
+        Action::iter().collect::<Vec<_>>()[idx as usize]
     }
 
-    fn learn(&self, state: Pos, state_next: Pos, action: Action, reward: f32) {
-        let input = self.build_input(state);
-        let output = self.model.forward(input);
+    fn learn(&mut self, state: Pos, state_next: Pos, action: Action, reward: f32) {
+        let output = self.predict(state);
+        let q = output.select(0, Tensor::from_data([action as usize], &self.device));
 
-        let loss = HuberLossConfig::new()
-            .init(&self.device)
-            .forward(output.clone(), Tensor::<B, 1>::from_floats(vec![reward], &self.device));
+        let target = if reward > 0.0 {
+            q.clone() + (-q.clone() + reward) * ETA
+        } else {
+            let next_q_max = self.predict(state_next).max();
+            q.clone() + (next_q_max * GAMMA - q.clone()) * ETA
+        };
+
+        let loss = self.loss.forward(q, target, Reduction::Mean);
+        let grads = loss.backward();
+        let grads = GradientsParams::from_grads(grads, &self.model);
+        self.model = self.optim.step(0.001, self.model.clone(), grads);
     }
 
     fn build_input(&self, state: Pos) -> Tensor<B, 1> {
-        let mut array = vec![0.0; self.input_shape.0 * self.input_shape.1];
-        array[state.y * self.input_shape.0 + state.x] = 1.0;
-        Tensor::<B, 1>::from_floats(array, &self.device)
+        let input_dim = self.input_shape.0 * self.input_shape.1;
+        let mut array = vec![0.0; input_dim];
+        let idx = state.x + state.y * self.input_shape.0;
+        array[idx] = 1.0;
+        Tensor::<B, 1>::from_floats(&*array, &self.device)
+    }
+
+    fn predict(&self, state: Pos) -> Tensor<B, 1> {
+        let input = self.build_input(state);
+        self.model.forward(input)
     }
 }
 
@@ -179,12 +216,12 @@ fn main() {
 
     type B = Autodiff<LibTorch>;
     let device = LibTorchDevice::Mps;
-    let agent = Agent::<B>::new((env.field.width, env.field.height), Action::COUNT, &device);
+    let mut agent = Agent::<B>::new((env.field.width, env.field.height), Action::COUNT, &device);
 
     for episode in 0..MAX_EPISODE {
         loop {
             let state = env.state;
-            let action = agent.decide();
+            let action = agent.decide(state);
             let (state_next, reward, done) = env.step(action);
             println!("Episode: {}, Step: {}, State: {}, StateN: {}, Reward: {}, Done: {}", episode, env.step - 1, state, state_next, reward, done);
 
