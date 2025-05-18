@@ -49,8 +49,8 @@ struct Env {
     step: usize,
 }
 
-const MAX_STEP: usize = 5;
-const MAX_EPISODE: usize = 3;
+const MAX_STEP: usize = 10;
+const MAX_EPISODE: usize = 1;
 
 impl Env {
     fn new(field: Field) -> Self {
@@ -68,12 +68,14 @@ impl Env {
             Action::Left => (-1, 0),
             Action::Right => (1, 0),
         };
+        let mut reward = 0.0;
         let pos = self.field.move_by(self.state, dx, dy);
         if pos != self.state {
             self.state = pos;
+        } else {
+            reward = -1.0;
         }
 
-        let mut reward = 0.0;
         if self.field.field.get(&pos).unwrap().is_type(NodeType::Goal) {
             reward = 1.0;
         }
@@ -104,7 +106,7 @@ struct Model<B: Backend> {
 }
 
 impl<B: Backend> Model<B> {
-    fn forward(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
+    fn forward(&self, input: Tensor<B, 2>) -> Tensor<B, 2> {
         let x = self.activation.forward(self.linear1.forward(input));
         let x = self.activation.forward(self.linear2.forward(x));
         self.linear3.forward(x)
@@ -164,39 +166,46 @@ impl<B: AutodiffBackend> Agent<B> {
             return Action::sample(dist);
         }
 
-        let output = self.predict(state);
-        let idx: u8 = output.argmax(0).into_scalar().elem();
+        let output = self.predict(state, false);
+        let idx: u8 = output.argmax(1).into_scalar().elem();
         Action::iter().collect::<Vec<_>>()[idx as usize]
     }
 
     fn learn(&mut self, state: Pos, state_next: Pos, action: Action, reward: f32) {
-        let output = self.predict(state);
+        let output = self.predict(state, true);
         let q = output.select(0, Tensor::from_data([action as usize], &self.device));
 
         let target = if reward > 0.0 {
             q.clone() + (-q.clone() + reward) * ETA
         } else {
-            let next_q_max = self.predict(state_next).max();
+            let next_q_max = self.predict(state_next, false).max_dim(1);
             q.clone() + (next_q_max * GAMMA - q.clone()) * ETA
         };
 
         let loss = self.loss.forward(q, target, Reduction::Mean);
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
-        self.model = self.optim.step(0.001, self.model.clone(), grads);
+        self.model = self.optim.step(0.01, self.model.clone(), grads);
     }
 
-    fn build_input(&self, state: Pos) -> Tensor<B, 1> {
+    fn build_input(&self, state: Pos, require_grad: bool) -> Tensor<B, 2> {
         let input_dim = self.input_shape.0 * self.input_shape.1;
         let mut array = vec![0.0; input_dim];
         let idx = state.x + state.y * self.input_shape.0;
         array[idx] = 1.0;
-        Tensor::<B, 1>::from_floats(&*array, &self.device)
+        let tensor = Tensor::<B, 1>::from_floats(&*array, &self.device).reshape([1, input_dim]);
+        tensor.set_require_grad(require_grad)
     }
 
-    fn predict(&self, state: Pos) -> Tensor<B, 1> {
-        let input = self.build_input(state);
+    fn predict(&self, state: Pos, require_grad: bool) -> Tensor<B, 2> {
+        let input = self.build_input(state, require_grad);
         self.model.forward(input)
+    }
+
+    fn dump_qvalue(&self) -> Tensor<B, 2> {
+        let input = Tensor::eye(self.input_shape.0 * self.input_shape.1, &self.device);
+        let output = self.model.forward(input);
+        output
     }
 }
 
@@ -231,5 +240,17 @@ fn main() {
             }
         }
         env.reset();
+    }
+    println!("--- completed ---");
+    let tensor = agent.dump_qvalue();
+    for y in 0..env.field.height { 
+        for x in 0..env.field.width { 
+            let node = env.field.get(x, y).unwrap();
+            if node.is_type(NodeType::Wall) {
+                continue;
+            }
+            let q = tensor.clone().select(0, Tensor::from_data([x + y * env.field.width], &device));
+            println!("{}({}, {}): {:.3}", field_sample[y].chars().collect::<Vec<_>>()[x], y, x, q.to_data());
+        }
     }
 }
