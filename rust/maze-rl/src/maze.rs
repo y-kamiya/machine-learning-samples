@@ -111,6 +111,10 @@ impl Field {
 
         pos
     }
+
+    pub fn get(&self, x: usize, y: usize) -> Option<&Node> {
+        self.field.get(&Pos::new(x, y))
+    }
 }
 
 impl fmt::Display for Field {
