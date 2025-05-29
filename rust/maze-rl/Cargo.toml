@@ -8,5 +8,6 @@ default = ["burn/tch"]
 
 [dependencies]
 burn = { version = "0.17.0", features = ["train"] }
+itertools = "0.14.0"
 rand = "0.9.1"
 strum = { version = "0.27.1", features = ["derive"] }

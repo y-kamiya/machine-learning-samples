@@ -1,11 +1,16 @@
 mod maze;
 
 use maze::{Field, Pos, NodeType};
-use rand;
-use rand::distr::{
-    Distribution,
-    weighted::WeightedIndex,
+use rand::{
+    self, SeedableRng,
+    distr::{
+        Distribution,
+        weighted::WeightedIndex,
+    },
+    rngs::StdRng,
+    seq::IteratorRandom,
 };
+use std::collections::VecDeque;
 use burn::{
     prelude::*,
     tensor::backend::AutodiffBackend,
@@ -25,13 +30,14 @@ use burn::{
     },
 };
 use strum::{IntoEnumIterator, EnumCount};
+use itertools::MultiUnzip;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::EnumCount, strum::EnumIter)]
 enum Action {
     Up,
+    Right,
     Down,
     Left,
-    Right,
 }
 
 impl Action {
@@ -49,8 +55,13 @@ struct Env {
     step: usize,
 }
 
-const MAX_STEP: usize = 10;
-const MAX_EPISODE: usize = 10;
+const MAX_STEP: usize = 20;
+const MAX_EPISODE: usize = 20;
+const ETA: f32 = 0.1;
+const GAMMA: f32 = 0.9;
+const EPSILON: f32 = 0.5;
+const REPLAY_SIZE: usize = 4;
+
 
 impl Env {
     fn new(field: Field) -> Self {
@@ -142,11 +153,8 @@ struct Agent<B: AutodiffBackend> {
     loss: HuberLoss,
     input_shape: (usize, usize),
     device: B::Device,
+    memory: Memory,
 }
-
-const ETA: f32 = 0.1;
-const GAMMA: f32 = 0.9;
-const EPSILON: f32 = 0.5;
 
 impl<B: AutodiffBackend> Agent<B> {
     fn new(input_shape: (usize, usize), output_dim: usize, device: &B::Device) -> Self {
@@ -157,6 +165,7 @@ impl<B: AutodiffBackend> Agent<B> {
             loss: HuberLossConfig::new(1.0).init(),
             input_shape: input_shape,
             device: device.clone(),
+            memory: Memory::new(42),
         }
     }
     fn decide(&self, state: Pos) -> Action {
@@ -166,21 +175,42 @@ impl<B: AutodiffBackend> Agent<B> {
             return Action::sample(dist);
         }
 
-        let output = self.predict(state, false);
+        let output = self.predict(&[state]);
         let idx: u8 = output.argmax(1).into_scalar().elem();
         Action::iter().collect::<Vec<_>>()[idx as usize]
     }
 
-    fn learn(&mut self, state: Pos, state_next: Pos, action: Action, reward: f32) {
-        let output = self.predict(state, true);
-        let q = output.select(0, Tensor::from_data([action as usize], &self.device));
+    fn learn(&mut self) {
+        if self.memory.len() < REPLAY_SIZE * 10 {
+            return;
+        }
 
-        let target = if reward > 0.0 {
-            q.clone() + (-q.clone() + reward) * ETA
-        } else {
-            let next_q_max = self.predict(state_next, false).max_dim(1);
-            q.clone() + (next_q_max * GAMMA - q.clone()) * ETA
-        };
+        let experiences = self.memory.pick_random();
+        let (states, actions, rewards, state_nexts): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = experiences.iter().map(|e| {
+            (
+                e.state,
+                e.action as u8,
+                e.reward,
+                e.next_state,
+            )
+        }).multiunzip();
+
+        let output = self.predict(&states);
+        let action_tensor = Tensor::<B, 1, Int>::from_data(&*actions, &self.device).reshape([REPLAY_SIZE, 1]);
+        let q = output.gather(1, action_tensor);
+        // println!("output shape: {:?}", output.shape());
+        // println!("q: {}", q.to_data());
+        // println!("actions: {:?}", actions);
+        // println!("tensor shape: {:?}", q.shape());
+
+        let reward_tensor = Tensor::<B, 1>::from_data(&*rewards, &self.device).reshape([REPLAY_SIZE, 1]);
+        let next_q_max = self.predict(&state_nexts).max_dim(1);
+        let target = q.clone() + (next_q_max * GAMMA - q.clone() + reward_tensor) * ETA;
+        // println!("reward shape: {:?}", reward_tensor.shape());
+        // println!("q max shape: {:?}", next_q_max.shape());
+        // println!("target shape: {:?}", target.shape());
+        // println!("aaaaaaaaaaaaaaaa");
+        // std::process::exit(0);
 
         let loss = self.loss.forward(q, target, Reduction::Mean);
         let grads = loss.backward();
@@ -189,17 +219,16 @@ impl<B: AutodiffBackend> Agent<B> {
         self.model = self.optim.step(0.01, self.model.clone(), grads);
     }
 
-    fn build_input(&self, state: Pos, require_grad: bool) -> Tensor<B, 2> {
+    fn build_input(&self, states: &[Pos]) -> Tensor<B, 2> {
         let input_dim = self.input_shape.0 * self.input_shape.1;
-        let mut array = vec![0.0; input_dim];
-        let idx = state.x + state.y * self.input_shape.0;
-        array[idx] = 1.0;
-        let tensor = Tensor::<B, 1>::from_floats(&*array, &self.device).reshape([1, input_dim]);
-        tensor.set_require_grad(require_grad)
+        let idxs = states.iter().map(|s| s.x + s.y * self.input_shape.0).collect::<Vec<_>>();
+        let idx_tensor = Tensor::<B, 1>::from_data(&*idxs, &self.device);
+        let tensor = idx_tensor.one_hot(input_dim);
+        tensor
     }
 
-    fn predict(&self, state: Pos, require_grad: bool) -> Tensor<B, 2> {
-        let input = self.build_input(state, require_grad);
+    fn predict(&self, states: &[Pos]) -> Tensor<B, 2> {
+        let input = self.build_input(states);
         self.model.forward(input)
     }
 
@@ -207,6 +236,39 @@ impl<B: AutodiffBackend> Agent<B> {
         let input = Tensor::eye(self.input_shape.0 * self.input_shape.1, &self.device);
         let output = self.model.forward(input);
         output
+    }
+}
+
+struct Experience {
+    state: Pos,
+    action: Action,
+    reward: f32,
+    next_state: Pos,
+}
+
+struct Memory {
+    storage: VecDeque<Experience>,
+    rng: StdRng,
+}
+
+impl Memory {
+    fn new(seed: u64) -> Self {
+        Self {
+            storage: VecDeque::new(),
+            rng: SeedableRng::seed_from_u64(seed),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.storage.len()
+    }
+
+    fn add(&mut self, exp: Experience) {
+        self.storage.push_back(exp);
+    }
+
+    fn pick_random(&mut self) -> Vec<&Experience> {
+        self.storage.iter().choose_multiple(&mut self.rng, REPLAY_SIZE)
     }
 }
 
@@ -243,13 +305,20 @@ fn main() {
     let mut agent = Agent::<B>::new((env.field.width, env.field.height), Action::COUNT, &device);
 
     for episode in 0..MAX_EPISODE {
+        println!("--- start episode {} ---", episode);
         loop {
             let state = env.state;
             let action = agent.decide(state);
             let (state_next, reward, done) = env.step(action);
-            println!("Episode: {}, Step: {}, State: {}, StateN: {}, Reward: {}, Done: {}", episode, env.step - 1, state, state_next, reward, done);
+            println!("Step: {}, State: {}, Action: {:?}, StateN: {}, Reward: {}, Done: {}", env.step - 1, state, action, state_next, reward, done);
 
-            agent.learn(state, state_next, action, reward);
+            agent.memory.add(Experience {
+                state,
+                action,
+                reward,
+                next_state: state_next,
+            });
+            agent.learn();
             if done {
                 break;
             }
