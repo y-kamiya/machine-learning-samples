@@ -57,12 +57,13 @@ struct Env {
     step: usize,
 }
 
-const MAX_STEP: usize = 20;
+const MAX_STEP: usize = 50;
 const MAX_EPISODE: usize = 20;
 const ETA: f32 = 0.1;
 const GAMMA: f32 = 0.9;
 const EPSILON: f32 = 0.5;
-const REPLAY_SIZE: usize = 4;
+const BATCH_SIZE: usize = 8;
+const REPLAY_BUFFER_MAX: usize = 100;
 
 
 impl Env {
@@ -151,8 +152,7 @@ impl ModelConfig{
 
 struct Agent<B: AutodiffBackend> {
     model: Model<B>,
-    target_model: Model<B::InnerBackend>,
-    model_config: ModelConfig,
+    target_model: Model<B>,
     optim: OptimizerAdaptor<Adam, Model<B>, B>,
     loss: HuberLoss,
     input_shape: (usize, usize),
@@ -163,11 +163,10 @@ struct Agent<B: AutodiffBackend> {
 impl<B: AutodiffBackend> Agent<B> {
     fn new(input_shape: (usize, usize), output_dim: usize, device: &B::Device) -> Self {
         let input_dim = input_shape.0 * input_shape.1;
-        let model_config = ModelConfig::new(input_dim, output_dim);
+        let model = ModelConfig::new(input_dim, output_dim).init(&device.clone());
         Self {
-            model: model_config.init(&device.clone()),
-            target_model: model_config.init::<B::InnerBackend>(&device.clone()),
-            model_config,
+            target_model: model.clone().no_grad(),
+            model,
             optim: AdamConfig::new().init(),
             loss: HuberLossConfig::new(1.0).init(),
             input_shape,
@@ -177,11 +176,9 @@ impl<B: AutodiffBackend> Agent<B> {
     }
 
     fn update_target_model(&mut self) {
-        let record = self.model.clone().into_record();
-        self.target_model = self.model_config
-            .init::<B::InnerBackend>(&self.device)
-            .load_record(record);
+        self.target_model = self.model.clone().no_grad();
     }
+
     fn decide(&self, state: State) -> Action {
         if rand::random::<f32>() < EPSILON {
             println!("Random action");
@@ -189,13 +186,13 @@ impl<B: AutodiffBackend> Agent<B> {
             return Action::sample(dist);
         }
 
-        let output = self.predict(&[state]);
+        let output = self.predict(&[state], true);
         let idx: u8 = output.argmax(1).into_scalar().elem();
         Action::iter().collect::<Vec<_>>()[idx as usize]
     }
 
     fn learn(&mut self) {
-        if self.memory.len() < REPLAY_SIZE * 10 {
+        if self.memory.len() < BATCH_SIZE * 10 {
             return;
         }
 
@@ -209,16 +206,16 @@ impl<B: AutodiffBackend> Agent<B> {
             )
         }).multiunzip();
 
-        let output = self.predict(&states);
-        let action_tensor = Tensor::<B, 1, Int>::from_data(&*actions, &self.device).reshape([REPLAY_SIZE, 1]);
+        let output = self.predict(&states, false);
+        let action_tensor = Tensor::<B, 1, Int>::from_data(&*actions, &self.device).reshape([BATCH_SIZE, 1]);
         let q = output.gather(1, action_tensor);
         // println!("output shape: {:?}", output.shape());
         // println!("q: {}", q.to_data());
         // println!("actions: {:?}", actions);
         // println!("tensor shape: {:?}", q.shape());
 
-        let reward_tensor = Tensor::<B, 1>::from_data(&*rewards, &self.device).reshape([REPLAY_SIZE, 1]);
-        let next_q_max = self.predict(&state_nexts).max_dim(1);
+        let reward_tensor = Tensor::<B, 1>::from_data(&*rewards, &self.device).reshape([BATCH_SIZE, 1]);
+        let next_q_max = self.predict(&state_nexts, true).max_dim(1);
         let target = q.clone() + (next_q_max * GAMMA - q.clone() + reward_tensor) * ETA;
         // println!("reward shape: {:?}", reward_tensor.shape());
         // println!("q max shape: {:?}", next_q_max.shape());
@@ -230,7 +227,7 @@ impl<B: AutodiffBackend> Agent<B> {
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
         println!("Loss: {:.3}", loss.to_data());
-        self.model = self.optim.step(0.01, self.model.clone(), grads);
+        self.model = self.optim.step(0.05, self.model.clone(), grads);
     }
 
     fn build_input(&self, states: &[State]) -> Tensor<B, 2> {
@@ -241,9 +238,24 @@ impl<B: AutodiffBackend> Agent<B> {
         tensor
     }
 
-    fn predict(&self, states: &[State]) -> Tensor<B, 2> {
+    fn predict(&self, states: &[State], is_target: bool) -> Tensor<B, 2> {
         let input = self.build_input(states);
+        if is_target {
+            return self.target_model.forward(input);
+        }
         self.model.forward(input)
+    }
+
+    fn memorize(&mut self, state: State, action: Action, reward: f32, next_state: State) {
+        if self.memory.len() >= REPLAY_BUFFER_MAX {
+            self.memory.storage.pop_front();
+        }
+        self.memory.add(Experience {
+            state,
+            action,
+            reward,
+            next_state,
+        });
     }
 
     fn dump_qvalue(&self) -> Tensor<B, 2> {
@@ -282,7 +294,7 @@ impl Memory {
     }
 
     fn pick_random(&mut self) -> Vec<&Experience> {
-        self.storage.iter().choose_multiple(&mut self.rng, REPLAY_SIZE)
+        self.storage.iter().choose_multiple(&mut self.rng, BATCH_SIZE)
     }
 }
 
@@ -295,7 +307,7 @@ fn print_qvalue<B: AutodiffBackend>(agent: &Agent<B>, env: &Env, field_sample: &
                 continue;
             }
             let q = tensor.clone().select(0, Tensor::from_data([x + y * env.field.width], &agent.device));
-            println!("{}({}, {}): {:.3}", field_sample[y].chars().collect::<Vec<_>>()[x], y, x, q.to_data());
+            println!("{}({}, {}): {:.3}", field_sample[y].chars().collect::<Vec<_>>()[x], x, y, q.to_data());
         }
     }
 }
@@ -326,17 +338,14 @@ fn main() {
             let (state_next, reward, done) = env.step(action);
             println!("Step: {}, State: {}, Action: {:?}, StateN: {}, Reward: {}, Done: {}", env.step - 1, state, action, state_next, reward, done);
 
-            agent.memory.add(Experience {
-                state,
-                action,
-                reward,
-                next_state: state_next,
-            });
+            agent.memorize(state, action, reward, state_next);
             agent.learn();
+
             if done {
                 break;
             }
         }
+        agent.update_target_model();
         env.reset();
 
         println!("--- episode {} completed ---", episode);
