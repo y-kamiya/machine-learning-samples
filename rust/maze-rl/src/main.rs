@@ -151,6 +151,8 @@ impl ModelConfig{
 
 struct Agent<B: AutodiffBackend> {
     model: Model<B>,
+    target_model: Model<B::InnerBackend>,
+    model_config: ModelConfig,
     optim: OptimizerAdaptor<Adam, Model<B>, B>,
     loss: HuberLoss,
     input_shape: (usize, usize),
@@ -161,14 +163,24 @@ struct Agent<B: AutodiffBackend> {
 impl<B: AutodiffBackend> Agent<B> {
     fn new(input_shape: (usize, usize), output_dim: usize, device: &B::Device) -> Self {
         let input_dim = input_shape.0 * input_shape.1;
+        let model_config = ModelConfig::new(input_dim, output_dim);
         Self {
-            model: ModelConfig::new(input_dim, output_dim).init(device),
+            model: model_config.init(&device.clone()),
+            target_model: model_config.init::<B::InnerBackend>(&device.clone()),
+            model_config,
             optim: AdamConfig::new().init(),
             loss: HuberLossConfig::new(1.0).init(),
-            input_shape: input_shape,
+            input_shape,
             device: device.clone(),
             memory: Memory::new(42),
         }
+    }
+
+    fn update_target_model(&mut self) {
+        let record = self.model.clone().into_record();
+        self.target_model = self.model_config
+            .init::<B::InnerBackend>(&self.device)
+            .load_record(record);
     }
     fn decide(&self, state: State) -> Action {
         if rand::random::<f32>() < EPSILON {
