@@ -25,7 +25,6 @@ pub enum NodeType {
     Goal,
     Wall,
     Road,
-    Mark,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -128,7 +127,6 @@ impl fmt::Display for Field {
                     NodeType::Goal => 'G',
                     NodeType::Wall => '#',
                     NodeType::Road => '.',
-                    NodeType::Mark => 'x',
                 };
                 write!(f, "{}", c)?;
             }

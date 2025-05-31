@@ -49,9 +49,11 @@ impl Action {
     }
 }
 
+type State = Pos;
+
 struct Env {
     field: Field,
-    state: Pos,
+    state: State,
     step: usize,
 }
 
@@ -72,7 +74,7 @@ impl Env {
         }
     }
 
-    fn step(&mut self, action: Action) -> (Pos, f32, bool) {
+    fn step(&mut self, action: Action) -> (State, f32, bool) {
         let (dx, dy) = match action {
             Action::Up => (0, 1),
             Action::Down => (0, -1),
@@ -87,7 +89,7 @@ impl Env {
             reward = -1.0;
         }
 
-        if self.field.field.get(&pos).unwrap().is_type(NodeType::Goal) {
+        if pos == self.field.goal {
             reward = 1.0;
         }
 
@@ -168,7 +170,7 @@ impl<B: AutodiffBackend> Agent<B> {
             memory: Memory::new(42),
         }
     }
-    fn decide(&self, state: Pos) -> Action {
+    fn decide(&self, state: State) -> Action {
         if rand::random::<f32>() < EPSILON {
             println!("Random action");
             let dist = WeightedIndex::new([0.25, 0.25, 0.25, 0.25]).unwrap();
@@ -219,7 +221,7 @@ impl<B: AutodiffBackend> Agent<B> {
         self.model = self.optim.step(0.01, self.model.clone(), grads);
     }
 
-    fn build_input(&self, states: &[Pos]) -> Tensor<B, 2> {
+    fn build_input(&self, states: &[State]) -> Tensor<B, 2> {
         let input_dim = self.input_shape.0 * self.input_shape.1;
         let idxs = states.iter().map(|s| s.x + s.y * self.input_shape.0).collect::<Vec<_>>();
         let idx_tensor = Tensor::<B, 1>::from_data(&*idxs, &self.device);
@@ -227,7 +229,7 @@ impl<B: AutodiffBackend> Agent<B> {
         tensor
     }
 
-    fn predict(&self, states: &[Pos]) -> Tensor<B, 2> {
+    fn predict(&self, states: &[State]) -> Tensor<B, 2> {
         let input = self.build_input(states);
         self.model.forward(input)
     }
@@ -240,10 +242,10 @@ impl<B: AutodiffBackend> Agent<B> {
 }
 
 struct Experience {
-    state: Pos,
+    state: State,
     action: Action,
     reward: f32,
-    next_state: Pos,
+    next_state: State,
 }
 
 struct Memory {
