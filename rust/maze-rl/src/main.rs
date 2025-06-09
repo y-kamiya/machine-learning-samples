@@ -32,6 +32,12 @@ use burn::{
 use strum::{IntoEnumIterator, EnumCount};
 use itertools::MultiUnzip;
 
+use eframe::{
+    egui, 
+    epaint::{PathStroke, StrokeKind},
+};
+use rand::Rng;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::EnumCount, strum::EnumIter)]
 enum Action {
     Up,
@@ -312,43 +318,163 @@ fn print_qvalue<B: AutodiffBackend>(agent: &Agent<B>, env: &Env, field_sample: &
     }
 }
 
-fn main() {
-    let field_sample = [
-        "#######",
-        "#S....#",
-        "##.#.##",
-        "####.##",
-        "#G....#",
-        "#######",
-    ];
-    let field = Field::new(&field_sample);
-    println!("{}", field);
+const GRID_WIDTH: usize = 5;
+const GRID_HEIGHT: usize = 5;
 
-    let mut env = Env::new(field);
+#[derive(Default)]
+struct QVisualizer {
+    q_values: [[[f32; 4]; GRID_WIDTH]; GRID_HEIGHT],
+}
 
-    type B = Autodiff<LibTorch>;
-    let device = LibTorchDevice::Mps;
-    let mut agent = Agent::<B>::new((env.field.width, env.field.height), Action::COUNT, &device);
+impl eframe::App for QVisualizer {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let (response, painter) = ui.allocate_painter(
+                egui::Vec2::new(400.0, 400.0),
+                egui::Sense::hover(),
+            );
 
-    for episode in 0..MAX_EPISODE {
-        println!("--- start episode {} ---", episode);
-        loop {
-            let state = env.state;
-            let action = agent.decide(state);
-            let (state_next, reward, done) = env.step(action);
-            println!("Step: {}, State: {}, Action: {:?}, StateN: {}, Reward: {}, Done: {}", env.step - 1, state, action, state_next, reward, done);
+            let rect = response.rect;
+            let cell_w = rect.width() / GRID_WIDTH as f32;
+            let cell_h = rect.height() / GRID_HEIGHT as f32;
 
-            agent.memorize(state, action, reward, state_next);
-            agent.learn();
+            for y in 0..GRID_HEIGHT {
+                for x in 0..GRID_WIDTH {
+                    let x0 = rect.left() + x as f32 * cell_w;
+                    let y0 = rect.top() + y as f32 * cell_h;
+                    let x1 = x0 + cell_w;
+                    let y1 = y0 + cell_h;
+                    let cx = (x0 + x1) / 2.0;
+                    let cy = (y0 + y1) / 2.0;
 
-            if done {
-                break;
+                    let q = self.q_values[y][x];
+                    let min_q = q.iter().cloned().fold(f32::INFINITY, f32::min);
+                    let max_q = q.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                    let normalize = |v: f32| (v - min_q) / (max_q - min_q + 1e-5);
+                    let to_color = |v: f32| {
+                        let n = normalize(v);
+                        egui::Color32::from_rgb(
+                            (n * 255.0) as u8,
+                            0,
+                            ((1.0 - n) * 255.0) as u8,
+                        )
+                    };
+                    let to_stroke = |v: f32| {
+                        PathStroke::new(1.0, to_color(v))
+                    };
+
+                    let corners = [
+                        egui::pos2(x0, y0),         // top-left
+                        egui::pos2(x1, y0),         // top-right
+                        egui::pos2(x1, y1),         // bottom-right
+                        egui::pos2(x0, y1),         // bottom-left
+                        egui::pos2(cx, cy),         // center
+                    ];
+
+                    // up
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![corners[0], corners[1], corners[4]],
+                        to_color(q[0]),
+                        to_stroke(q[0]),
+                    ));
+                    // right
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![corners[1], corners[2], corners[4]],
+                        to_color(q[1]),
+                        to_stroke(q[1]),
+                    ));
+                    // down
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![corners[2], corners[3], corners[4]],
+                        to_color(q[2]),
+                        to_stroke(q[2]),
+                    ));
+                    // left
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![corners[3], corners[0], corners[4]],
+                        to_color(q[3]),
+                        to_stroke(q[3]),
+                    ));
+
+                    // optional: grid border
+                    painter.rect_filled(
+                        egui::Rect::from_min_max(
+                            egui::pos2(x0, y0),
+                            egui::pos2(x1, y1),
+                        ),
+                        0.0,
+                        egui::Color32::TRANSPARENT,
+                    );
+                    painter.rect_stroke(
+                        egui::Rect::from_min_max(
+                            egui::pos2(x0, y0),
+                            egui::pos2(x1, y1),
+                        ),
+                        0.0,
+                        egui::Stroke::new(1.0, egui::Color32::GRAY),
+                        StrokeKind::Middle,
+                    );
+                }
             }
-        }
-        agent.update_target_model();
-        env.reset();
 
-        println!("--- episode {} completed ---", episode);
-        print_qvalue(&agent, &env, &field_sample);
+            // Q値をランダムに更新（ダミー学習）
+            let mut rng = rand::thread_rng();
+            for y in 0..GRID_HEIGHT {
+                for x in 0..GRID_WIDTH {
+                    for a in 0..4 {
+                        self.q_values[y][x][a] += rng.gen_range(-0.01..0.01);
+                    }
+                }
+            }
+
+            ctx.request_repaint(); // 毎フレーム更新
+        });
     }
 }
+
+fn main() -> eframe::Result<()> {
+    let app = QVisualizer::default();
+    let native_options = eframe::NativeOptions::default();
+    eframe::run_native("visualizer", native_options, Box::new(|_cc| Ok(Box::new(app))))
+}
+
+// fn main() {
+//     let field_sample = [
+//         "#######",
+//         "#S....#",
+//         "##.#.##",
+//         "####.##",
+//         "#G....#",
+//         "#######",
+//     ];
+//     let field = Field::new(&field_sample);
+//     println!("{}", field);
+//
+//     let mut env = Env::new(field);
+//
+//     type B = Autodiff<LibTorch>;
+//     let device = LibTorchDevice::Mps;
+//     let mut agent = Agent::<B>::new((env.field.width, env.field.height), Action::COUNT, &device);
+//
+//     for episode in 0..MAX_EPISODE {
+//         println!("--- start episode {} ---", episode);
+//         loop {
+//             let state = env.state;
+//             let action = agent.decide(state);
+//             let (state_next, reward, done) = env.step(action);
+//             println!("Step: {}, State: {}, Action: {:?}, StateN: {}, Reward: {}, Done: {}", env.step - 1, state, action, state_next, reward, done);
+//
+//             agent.memorize(state, action, reward, state_next);
+//             agent.learn();
+//
+//             if done {
+//                 break;
+//             }
+//         }
+//         agent.update_target_model();
+//         env.reset();
+//
+//         println!("--- episode {} completed ---", episode);
+//         print_qvalue(&agent, &env, &field_sample);
+//     }
+// }
