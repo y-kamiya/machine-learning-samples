@@ -6,6 +6,8 @@ from minigrid.manual_control import ManualControl
 
 from maze_from_text import MazeFromTextEnv
 
+from minigrid.wrappers import ImgObsWrapper
+
 
 if __name__ == "__main__":
     map_def = [
@@ -25,19 +27,21 @@ if __name__ == "__main__":
         kwargs={"map_def": map_def},
     )
 
-    env = gym.make("MazeFromText-v0", render_mode="human")
+    env = gym.make("MazeFromText-v0", render_mode="rgb_array")
+    env = ImgObsWrapper(env)
 
     # manual_control = ManualControl(env, seed=42)
     # manual_control.start()
 
     env.reset()
-    for t in range(5):
+    for t in range(1):
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
-        print(f"\nStep {t+1} reward={reward}, done={terminated or truncated}")
-        print(env.unwrapped.dump())
-        if terminated:
-            print("\nReached goal!")
-            break
+        print(obs.shape, action)
+        # print(f"\nStep {t+1} reward={reward}, done={terminated or truncated}")
+        # print(env.unwrapped.dump())
+        # if terminated:
+        #     print("\nReached goal!")
+        #     break
 
 
