@@ -9,4 +9,5 @@ dependencies = [
     "gymnasium>=1.2.2",
     "minigrid>=3.0.0",
     "stable-baselines3[extra]>=2.7.1",
+    "torchrl[utils]>=0.10.1",
 ]
