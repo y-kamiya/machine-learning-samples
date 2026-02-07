@@ -1,0 +1,13 @@
+[project]
+name = "minigrid-samples"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+# requires-python = ">=3.11, <3.12"
+dependencies = [
+    "gymnasium>=1.2.2",
+    "minigrid>=3.0.0",
+    "stable-baselines3[extra]>=2.7.1",
+    "torchrl[utils]>=0.10.1",
+]
