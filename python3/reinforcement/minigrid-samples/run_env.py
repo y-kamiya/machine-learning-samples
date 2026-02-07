@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import gymnasium as gym
 from gymnasium.envs.registration import register
-from minigrid.manual_control import ManualControl
 
-from maze_from_text import MazeFromTextEnv
 
 from minigrid.wrappers import ImgObsWrapper
 
@@ -18,7 +16,7 @@ if __name__ == "__main__":
         "#####.##",
         "#......#",
         "#.#g#.##",
-        "########"
+        "########",
     ]
 
     register(
@@ -43,5 +41,3 @@ if __name__ == "__main__":
         # if terminated:
         #     print("\nReached goal!")
         #     break
-
-

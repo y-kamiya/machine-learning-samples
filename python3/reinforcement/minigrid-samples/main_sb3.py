@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from functools import partial
 
-import gymnasium as gym
-from gymnasium.envs.registration import register
 from gymnasium.wrappers import FlattenObservation, RecordEpisodeStatistics, TimeLimit
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
@@ -32,9 +29,13 @@ MAP_DEF = [
 ]
 
 
-def make_env(map_def=MAP_DEF, seed=0, render_mode="rgb_array", max_steps=200, is_train=True):
+def make_env(
+    map_def=MAP_DEF, seed=0, render_mode="rgb_array", max_steps=200, is_train=True
+):
     def _init():
-        env = MazeFromTextEnv(map_def=map_def, render_mode=render_mode, max_steps=max_steps)
+        env = MazeFromTextEnv(
+            map_def=map_def, render_mode=render_mode, max_steps=max_steps
+        )
         env.reset(seed=seed)
         if is_train:
             env = RecordEpisodeStatistics(env)
@@ -42,6 +43,7 @@ def make_env(map_def=MAP_DEF, seed=0, render_mode="rgb_array", max_steps=200, is
         env = ImgObsWrapper(env)
         env = FlattenObservation(env)
         return env
+
     return _init
 
 
@@ -52,14 +54,13 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 ROLLOUT_STEPS = 2048
 BATCH_SIZE = 16
 
+
 def train(total_timesteps=100_000, n_envs=4):
     env_fns = [make_env(seed=i) for i in range(n_envs)]
     vec_env = DummyVecEnv(env_fns)
     vec_env = VecMonitor(venv=vec_env)
 
-    policy_kwargs = dict(
-        net_arch=[dict(pi=[128, 128], vf=[128, 128])]
-    )
+    policy_kwargs = dict(net_arch=[dict(pi=[128, 128], vf=[128, 128])])
 
     model = PPO(
         "MlpPolicy",
@@ -87,7 +88,6 @@ def evaluate(model_path=MODEL_PATH, episodes=5, is_dump=True):
 
     for ep in range(episodes):
         obs, info = env.reset()
-        done = False
         step = 0
         while True:
             action, _ = model.predict(obs, deterministic=True)
@@ -99,13 +99,15 @@ def evaluate(model_path=MODEL_PATH, episodes=5, is_dump=True):
                 base = getattr(env, "unwrapped", env)
                 while hasattr(base, "env"):
                     base = base.env
-                print(f"\n--- Episode {ep+1} Step {step} ---")
+                print(f"\n--- Episode {ep + 1} Step {step} ---")
                 print(base.dump())
 
             time.sleep(0.1)
 
             if terminated or truncated:
-                print(f"Episode {ep+1} finished after {step} steps, reward={info.get('episode', {}).get('r')}")
+                print(
+                    f"Episode {ep + 1} finished after {step} steps, reward={info.get('episode', {}).get('r')}"
+                )
                 break
     env.close()
 

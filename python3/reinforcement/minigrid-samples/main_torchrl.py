@@ -9,9 +9,13 @@ from gymnasium.wrappers import FlattenObservation, RecordEpisodeStatistics
 from minigrid.wrappers import ImgObsWrapper
 import torch
 import torchrl
-from torch.torch_version import TorchVersion
 from torchrl.envs.libs.gym import GymWrapper
-from torchrl.envs.transforms import TransformedEnv, Compose, StepCounter, DTypeCastTransform
+from torchrl.envs.transforms import (
+    TransformedEnv,
+    Compose,
+    StepCounter,
+    DTypeCastTransform,
+)
 from torchrl.modules import ProbabilisticActor, ValueOperator
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import ReplayBuffer
@@ -19,8 +23,6 @@ from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.objectives import ClipPPOLoss
 from tensordict.nn import TensorDictModule, TensorDictSequential
-
-from maze_from_text import MazeFromTextEnv
 
 
 MAP_DEF = [
@@ -52,10 +54,19 @@ def make_env(render_mode="rgb_array", max_steps=200):
     env = FlattenObservation(env)
 
     base = GymWrapper(env, device=torch.device("cpu"), categorical_action_encoding=True)
-    return TransformedEnv(base, Compose([
-        DTypeCastTransform(dtype_in=torch.uint8, dtype_out=torch.float32, in_keys=["observation"]),
-        StepCounter(max_steps=max_steps),
-    ]))
+    return TransformedEnv(
+        base,
+        Compose(
+            [
+                DTypeCastTransform(
+                    dtype_in=torch.uint8,
+                    dtype_out=torch.float32,
+                    in_keys=["observation"],
+                ),
+                StepCounter(max_steps=max_steps),
+            ]
+        ),
+    )
 
 
 def build_model(obs_key, n_actions, n_hidden):
@@ -130,6 +141,7 @@ PPO_EPOCHS = 10
 NUM_ENVS = 4
 ENTROPY_COEFF = 0.0
 
+
 def train(n_envs=4):
     env = make_env(render_mode="rgb_array")
     actor, critic = initialize_model(env)
@@ -147,11 +159,19 @@ def train(n_envs=4):
     )
 
     envs = torchrl.envs.ParallelEnv(num_workers=n_envs, create_env_fn=make_env)
-    collector = SyncDataCollector(envs, policy=actor, frames_per_batch=FRAMES_PER_BATCH, device=DEVICE, total_frames=-1)
+    collector = SyncDataCollector(
+        envs,
+        policy=actor,
+        frames_per_batch=FRAMES_PER_BATCH,
+        device=DEVICE,
+        total_frames=-1,
+    )
 
     storage = LazyTensorStorage(FRAMES_PER_BATCH)
     sampler = SamplerWithoutReplacement()
-    replay_buffer = ReplayBuffer(storage=storage, sampler=sampler, batch_size=BATCH_SIZE)
+    replay_buffer = ReplayBuffer(
+        storage=storage, sampler=sampler, batch_size=BATCH_SIZE
+    )
 
     for update in range(NUM_UPDATES):
         batch = next(iter(collector))
@@ -161,7 +181,9 @@ def train(n_envs=4):
             for i, rb_batch in enumerate(replay_buffer):
                 loss = loss_module(rb_batch.to(DEVICE))
                 optimizer.zero_grad()
-                loss_actor = loss["loss_objective"] - ENTROPY_COEFF * loss["loss_entropy"]
+                loss_actor = (
+                    loss["loss_objective"] - ENTROPY_COEFF * loss["loss_entropy"]
+                )
                 loss_actor.backward()
                 loss["loss_critic"].backward()
                 torch.nn.utils.clip_grad_norm_(
@@ -180,7 +202,9 @@ def train(n_envs=4):
                         "clip_fraction": loss.get("clip_fraction", None),
                         "ESS": loss.get("ESS", None),
                     }
-                    output = ", ".join([f"{k}: {v:.4f}" for k, v in entries.items() if v is not None])
+                    output = ", ".join(
+                        [f"{k}: {v:.4f}" for k, v in entries.items() if v is not None]
+                    )
                     print(output)
 
     collector.shutdown()
@@ -208,16 +232,17 @@ def evaluate(episodes=5, is_dump=True):
                 base = getattr(env, "unwrapped", env)
                 while hasattr(base, "env"):
                     base = base.env
-                print(f"\n--- Episode {ep+1} Step {step} ---")
+                print(f"\n--- Episode {ep + 1} Step {step} ---")
                 print(base.dump())
 
             time.sleep(0.1)
 
             td = td["next"]
             if td["done"].item():
-                print(f"Episode {ep+1} finished after {step} steps, teminated={td['terminated'].item()}, truncated={td['truncated'].item()}")
+                print(
+                    f"Episode {ep + 1} finished after {step} steps, teminated={td['terminated'].item()}, truncated={td['truncated'].item()}"
+                )
                 break
-            
 
     env.close()
 
