@@ -153,6 +153,19 @@ impl Field {
     pub fn get(&self, x: usize, y: usize) -> Option<&Node> {
         self.field.get(&Pos::new(x, y))
     }
+
+    pub fn movable_actions(&self, from: Pos) -> Vec<Action> {
+        let mut movable_actions = Vec::new();
+        for action in Action::iter() {
+            let to = self.act(from, action);
+            if from == to {
+                continue;
+            }
+            movable_actions.push(action);
+        }
+
+        movable_actions
+    }
 }
 
 impl fmt::Display for Field {
