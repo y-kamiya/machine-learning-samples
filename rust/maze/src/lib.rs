@@ -58,8 +58,8 @@ pub enum NodeType {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Node {
-    node_type: NodeType,
-    pos: Pos,
+    pub node_type: NodeType,
+    pub pos: Pos,
 }
 
 impl Node {

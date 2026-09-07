@@ -1,6 +1,6 @@
 use rand::prelude::*;
 use rand::seq::IndexedRandom;
-use maze::{Action, Field, Pos};
+use maze::{Action, Field, Pos, NodeType};
 
 use mcts::create_field;
 
@@ -119,7 +119,7 @@ fn create_new_node(tree: &Tree, parent_index: usize, field: &Field) -> TreeNode 
         }
     }
 
-    assert_eq!(next_state, None);
+    assert_ne!(next_state, None);
     let mut node = TreeNode::new(next_state.unwrap());
     node.parent = Some(parent_index);
     node
@@ -132,7 +132,21 @@ fn expand(tree: &mut Tree, parent_index: usize, field: &Field) -> usize {
     parent.add_child(new_index)
 }
 
-fn rollout() {
+const MAX_ROLLOUT: usize = 10;
+
+fn rollout(tree: &Tree, index: usize, field: &Field) -> f32 {
+    let mut rng = rand::rng();
+    let node = tree.get(index);
+    for _ in 0..MAX_ROLLOUT {
+        let movables = field.movable_actions(node.state);
+        let action = movables.iter().choose(&mut rng).unwrap();
+        let to = field.act(node.state, *action);
+        let is_goal = field.get(to.x, to.y).unwrap().node_type == NodeType::Goal;
+        if is_goal {
+            return 1.0;
+        }
+    }
+    return 0.0;
 }
 
 fn update() {
@@ -151,6 +165,10 @@ fn mcts() {
 
         let new_index = expand(&mut _tree, index, &_field);
         println!("{:?}", new_index);
+
+        let reward = rollout(&_tree, new_index, &_field);
+        println!("{:?}", reward);
+
     }
 
 
