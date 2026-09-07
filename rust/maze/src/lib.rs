@@ -154,6 +154,14 @@ impl Field {
         self.field.get(&Pos::new(x, y))
     }
 
+    pub fn is_goal(&self, pos: Pos) -> bool {
+        let node = self.field.get(&pos);
+        if node == None {
+            return false;
+        }
+        node.unwrap().is_type(NodeType::Goal)
+    }
+
     pub fn movable_actions(&self, from: Pos) -> Vec<Action> {
         let mut movable_actions = Vec::new();
         for action in Action::iter() {

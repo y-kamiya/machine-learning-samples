@@ -88,11 +88,26 @@ fn is_fully_expanded(tree: &Tree, index: usize, field: &Field) -> bool {
     return false;
 }
 
+fn ucb1(tree: &Tree, index: usize) -> f64 {
+    let node = tree.get(index);
+    assert!(node.parent != None);
+
+    let parent = tree.get(node.parent.unwrap());
+    let n = node.n_visit as f64;
+    let n_all = parent.n_visit as f64;
+
+    let exploit = node.score / n;
+    let explore = (2.0 * n_all.ln() / n).sqrt();
+    // println!("i:{}, exploit:{}, explore:{}", index, exploit, explore);
+    
+    exploit + explore
+}
+
 fn find_best_child(tree: &Tree, children: &Vec<usize>) -> usize {
     let mut rng = rand::rng();
-    let score_max = children.iter().map(|&i| tree.get(i).score).fold(f64::NEG_INFINITY, f64::max);
+    let ucb1_max = children.iter().map(|&i| ucb1(tree, i)).fold(f64::NEG_INFINITY, f64::max);
     let best_index = children.iter()
-        .filter(|i| tree.get(**i).score == score_max)
+        .filter(|i| ucb1(tree, **i) == ucb1_max)
         .choose(&mut rng).unwrap();
     *best_index
 }
@@ -132,25 +147,41 @@ fn expand(tree: &mut Tree, parent_index: usize, field: &Field) -> usize {
     parent.add_child(new_index)
 }
 
-const MAX_ROLLOUT: usize = 10;
+const MAX_ROLLOUT: usize = 100;
 
-fn rollout(tree: &Tree, index: usize, field: &Field) -> f32 {
+fn rollout(tree: &Tree, index: usize, field: &Field) -> f64 {
     let mut rng = rand::rng();
     let node = tree.get(index);
+    if field.is_goal(node.state) {
+        return 1.0;
+    }
+
     for _ in 0..MAX_ROLLOUT {
         let movables = field.movable_actions(node.state);
         let action = movables.iter().choose(&mut rng).unwrap();
         let to = field.act(node.state, *action);
-        let is_goal = field.get(to.x, to.y).unwrap().node_type == NodeType::Goal;
-        if is_goal {
+        if field.is_goal(to) {
             return 1.0;
         }
     }
     return 0.0;
 }
 
-fn update() {
+fn update_node(node: &mut TreeNode, reward: f64) {
+    node.n_visit += 1;
+    node.score = reward / node.n_visit as f64;
 }
+
+fn update(tree: &mut Tree, index: usize, field: &Field, reward: f64) {
+    let mut idx = Some(index);
+    while idx != None {
+        let node = tree.get_mut(idx.unwrap());
+        update_node(node, reward);
+        idx = node.parent;
+    }
+}
+
+const N_TRAIN: usize = 100;
 
 fn mcts() {
     let _field = create_field(true);
@@ -158,17 +189,20 @@ fn mcts() {
     let mut _tree = Tree::new();
     _tree.add_node(TreeNode::new(_field.start));
 
-    for _ in 0..1 {
+    for i in 0..N_TRAIN {
+        println!("\ntrain {}", i);
+
         let index = select(&_tree, &_field);
         let node = _tree.get(index);
-        println!("{:?}", node);
+        println!("selected: {:?}", node);
 
         let new_index = expand(&mut _tree, index, &_field);
-        println!("{:?}", new_index);
+        println!("expanded index: {:?}", new_index);
 
         let reward = rollout(&_tree, new_index, &_field);
-        println!("{:?}", reward);
+        println!("rollout reward: {:?}", reward);
 
+        update(&mut _tree, new_index, &_field, reward);
     }
 
 
