@@ -75,16 +75,24 @@ impl Tree {
 
         let exploit = node.score / n;
         let explore = (2.0 * n_all.ln() / n).sqrt();
-        log::trace!("i:{}, exploit:{}, explore:{}", index, exploit, explore);
+        log::trace!("i:{}, exploit:{:.4}, explore:{:.4}", index, exploit, explore);
         
         exploit + explore
     }
 
-    fn best_children(&self, parent: usize) -> Vec<&usize> {
+    fn n_visit(&self, index: usize) -> f64 {
+        let node = self.get(index);
+        debug_assert!(node.parent != None);
+        node.n_visit as f64
+    }
+
+    fn best_children<F>(&self, parent: usize, func: F) -> Vec<&usize> 
+    where F: Fn(&Tree, usize) -> f64,
+    {
         let node = self.get(parent);
-        let ucb1_max = node.children.iter().map(|&i| self.ucb1(i)).fold(f64::NEG_INFINITY, f64::max);
+        let ucb1_max = node.children.iter().map(|&i| func(self, i)).fold(f64::NEG_INFINITY, f64::max);
         let best_indexes = node.children.iter()
-            .filter(|i| self.ucb1(**i) == ucb1_max).collect();
+            .filter(|i| func(self, **i) == ucb1_max).collect();
         best_indexes
     }
 
@@ -157,7 +165,7 @@ impl MCTS {
     fn select(&mut self) -> usize {
         let mut index = 0;
         while self.is_fully_expanded(index) {
-            let indexes = self.tree.best_children(index);
+            let indexes = self.tree.best_children(index, Tree::ucb1);
             index = **indexes.choose(&mut self.rng).unwrap();
         }
         index
@@ -226,6 +234,28 @@ impl MCTS {
             self.tree.update(new_index, reward);
         }
     }
+
+    fn execute(&mut self) {
+        log::info!("\n--------------------------------");
+        log::info!("start execute()");
+
+        let mut index: usize = 0;
+        for _ in 0..10 {
+            let node = self.tree.get(index);
+            log::info!("{:?}", node);
+
+            if self.field.is_goal(node.state) {
+                log::info!("end execute(): reached goal");
+                break;
+            }
+
+            let indexes = self.tree.best_children(index, Tree::n_visit);
+            if indexes.is_empty() {
+                log::info!("end execute(): no child");
+            }
+            index = **indexes.choose(&mut self.rng).unwrap();
+        }
+    }
 }
 
 fn main() {
@@ -233,9 +263,10 @@ fn main() {
 
     let cfg = Config {
         seed: 42,
-        n_rollout: 100,
-        n_train: 100,
+        n_rollout: 5,
+        n_train: 50,
     };
     let mut mcts = MCTS::new(cfg);
     mcts.train();
+    mcts.execute();
 }
