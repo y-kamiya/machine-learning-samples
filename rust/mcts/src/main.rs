@@ -204,12 +204,12 @@ impl MCTS {
         }
 
         let mut pos = node.state;
-        for _ in 0..self.cfg.n_rollout {
+        for i in 0..self.cfg.n_rollout {
             let movables = self.field.movable_actions(pos);
             let action = movables.iter().choose(&mut self.rng).unwrap();
             let to = self.field.act(pos, *action);
             if self.field.is_goal(to) {
-                return 1.0;
+                return 1.0 / (i as f64 + 1.0);
             }
             pos = to;
             
