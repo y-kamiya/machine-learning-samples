@@ -33,7 +33,7 @@ impl TreeNode {
 
     fn update_node(&mut self, reward: f64) {
         self.n_visit += 1;
-        self.score = reward / self.n_visit as f64;
+        self.score += reward;
     }
 }
 
@@ -195,13 +195,16 @@ impl MCTS {
             return 1.0;
         }
 
+        let mut pos = node.state;
         for _ in 0..self.cfg.n_rollout {
-            let movables = self.field.movable_actions(node.state);
+            let movables = self.field.movable_actions(pos);
             let action = movables.iter().choose(&mut self.rng).unwrap();
-            let to = self.field.act(node.state, *action);
+            let to = self.field.act(pos, *action);
             if self.field.is_goal(to) {
                 return 1.0;
             }
+            pos = to;
+            
         }
         return 0.0;
     }
