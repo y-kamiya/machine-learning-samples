@@ -252,6 +252,7 @@ impl MCTS {
             let indexes = self.tree.best_children(index, Tree::n_visit);
             if indexes.is_empty() {
                 log::info!("end execute(): no child");
+                break;
             }
             index = **indexes.choose(&mut self.rng).unwrap();
         }
@@ -263,7 +264,7 @@ fn main() {
 
     let cfg = Config {
         seed: 42,
-        n_rollout: 5,
+        n_rollout: 3,
         n_train: 50,
     };
     let mut mcts = MCTS::new(cfg);
